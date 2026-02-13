@@ -25,6 +25,9 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { Card } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+import NetworkVisualization from "@/components/community/NetworkVisualization";
 const badgeBronze = "/badge-bronze.png";
 const badgeSilver = "/badge-silver.png";
 const badgeGold = "/badge-gold.png";
@@ -39,6 +42,9 @@ import {
   History,
   Loader2,
   ArrowUpCircle,
+  ArrowUpRight,
+  Copy,
+  Wallet,
 } from "lucide-react";
 
 const tierBadges: Record<string, string> = {
@@ -57,6 +63,9 @@ const tierOrder: PackageKey[] = [
   "diamond",
 ];
 
+const cardEarnings = "/card-portfolio.jpg";
+const cardPending = "/card-shares.jpg";
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
@@ -64,6 +73,7 @@ export default function Dashboard() {
   const { user } = useAuth();
   const { summary, affiliateStatus, activeReferrals } = useCommissions();
   const { packages, formatPrice } = usePackages();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!user) {
@@ -94,8 +104,23 @@ export default function Dashboard() {
 
   return (
     <>
+      {/* My Network Header */}
+      {/* <section className="container mx-auto px-6 pt-6">
+        <div>
+          <h1 className="text-3xl font-bold">My Network</h1>
+          <p className="text-muted-foreground">
+            Connect and collaborate with fellow shareholders
+          </p>
+        </div>
+      </section> */}
+
+      {/* Network Visualization */}
+      {/* <section className="container mx-auto px-6 pb-6">
+        <NetworkVisualization />
+      </section> */}
+
       {/* Page Header */}
-      <section className="container mx-auto px-6 py-12 md:py-16">
+      <section className="container mx-auto px-6 py-8 md:py-10">
         <div className="max-w-4xl">
           <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-3">
             Dashboard
@@ -110,6 +135,100 @@ export default function Dashboard() {
               {rankInfo.currentRank}
             </span>
           </p>
+        </div>
+      </section>
+
+      {/* Stats Row */}
+      <section className="container mx-auto px-6 pb-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Total Earnings Card */}
+          <div className="relative overflow-hidden rounded-xl h-40 group">
+            <img
+              src={cardEarnings}
+              alt="Earnings background"
+              className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/30" />
+            <div className="relative h-full p-5 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-white/90">
+                  Total Earnings
+                </span>
+                <DollarSign className="h-5 w-5 text-white/70" />
+              </div>
+              <div>
+                <div className="text-3xl font-bold text-white">$12,450</div>
+                <p className="text-sm text-white/80 flex items-center mt-1">
+                  <ArrowUpRight className="h-4 w-4 text-emerald-400 mr-1" />
+                  <span className="text-emerald-400 font-medium">+8.2%</span>
+                  <span className="ml-1">this month</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Available to Withdraw Card */}
+          <div className="relative overflow-hidden rounded-xl h-40 group">
+            <img
+              src={cardPending}
+              alt="Withdraw background"
+              className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/30" />
+            <div className="relative h-full p-5 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-white/90">
+                  Available to Withdraw
+                </span>
+                <Wallet className="h-5 w-5 text-white/70" />
+              </div>
+              <div>
+                <div className="text-3xl font-bold text-white">$1,250</div>
+                <Button
+                  size="sm"
+                  className="mt-2 bg-orange-500 hover:bg-orange-600 text-white"
+                  onClick={() => {
+                    toast({
+                      title: "Withdrawal Requested",
+                      description:
+                        "Your withdrawal request is being processed.",
+                    });
+                  }}
+                >
+                  Withdraw Funds
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Referral Code Card */}
+          <Card className="overflow-hidden h-40">
+            <div className="h-full p-5 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Your Referral Code</span>
+                <Copy className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div>
+                <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-lg px-3 py-2 font-mono text-lg font-bold tracking-widest text-center mb-2">
+                  UTOPIA-2847X
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    navigator.clipboard.writeText("UTOPIA-2847X");
+                    toast({
+                      title: "Copied!",
+                      description: "Referral code copied to clipboard.",
+                    });
+                  }}
+                >
+                  Copy Code
+                </Button>
+              </div>
+            </div>
+          </Card>
         </div>
       </section>
 

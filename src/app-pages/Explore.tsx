@@ -182,7 +182,7 @@ export default function Explore() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Total Earnings Card */}
         <div className="relative overflow-hidden rounded-xl h-40 group">
           <img
@@ -251,28 +251,6 @@ export default function Explore() {
                 <span className="text-emerald-400 font-medium">+15%</span>
                 <span className="ml-1">value</span>
               </p> */}
-            </div>
-          </div>
-        </div>
-
-        {/* My Network Card */}
-        <div className="relative overflow-hidden rounded-xl h-40 group">
-          <img
-            src={cardNetwork}
-            alt="Network background"
-            className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/30" />
-          <div className="relative h-full p-5 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-white/90">
-                My Network
-              </span>
-              <Users className="h-5 w-5 text-white/70" />
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-white">85</div>
-              <p className="text-sm text-white/80 mt-1">Total Connections</p>
             </div>
           </div>
         </div>

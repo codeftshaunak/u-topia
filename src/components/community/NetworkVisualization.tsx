@@ -1,5 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MembershipBadge, membershipTiers, getCurrentUserTier } from "@/components/MembershipBadge";
+import {
+  MembershipBadge,
+  membershipTiers,
+  getCurrentUserTier,
+} from "@/components/MembershipBadge";
 
 interface NetworkLevel {
   level: number;
@@ -17,7 +21,7 @@ const networkLevels: NetworkLevel[] = membershipTiers.map((tier, index) => ({
   name: tier.name,
   count: index < 3 ? [12, 28, 45][index] : 0,
   isActive: index < 3,
-  radius: 55 + (index * 30),
+  radius: 55 + index * 30,
   color: tier.color,
   colorLight: tier.colorLight,
 }));
@@ -45,7 +49,12 @@ export default function NetworkVisualization() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
           {/* SVG Concentric Circles Visualization */}
           <div className="flex items-center justify-center">
-            <svg width="380" height="380" viewBox="0 0 380 380" className="overflow-visible">
+            <svg
+              width="380"
+              height="380"
+              viewBox="0 0 380 380"
+              className="overflow-visible"
+            >
               {/* Concentric rings - render from outside in */}
               {[...networkLevels].reverse().map((level) => (
                 <g key={level.level}>
@@ -58,10 +67,16 @@ export default function NetworkVisualization() {
                     stroke={level.color}
                     strokeWidth={level.isActive ? 3 : 2}
                     strokeOpacity={level.isActive ? 0.9 : 0.35}
-                    style={{ filter: level.isActive ? `drop-shadow(0 0 8px ${level.colorLight})` : 'none' }}
+                    style={{
+                      filter: level.isActive
+                        ? `drop-shadow(0 0 8px ${level.colorLight})`
+                        : "none",
+                    }}
                   />
                   {/* Level label - positioned on the right side of each ring */}
-                  <g transform={`translate(${centerX + level.radius + 8}, ${centerY})`}>
+                  <g
+                    transform={`translate(${centerX + level.radius + 8}, ${centerY})`}
+                  >
                     <rect
                       x="-28"
                       y="-12"
@@ -69,7 +84,11 @@ export default function NetworkVisualization() {
                       height="24"
                       rx="12"
                       fill={level.isActive ? level.color : "hsl(var(--muted))"}
-                      style={{ filter: level.isActive ? 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' : 'none' }}
+                      style={{
+                        filter: level.isActive
+                          ? "drop-shadow(0 2px 4px rgba(0,0,0,0.2))"
+                          : "none",
+                      }}
                     />
                     <text
                       x="0"
@@ -87,15 +106,21 @@ export default function NetworkVisualization() {
 
               {/* Center YOU circle */}
               <defs>
-                <linearGradient id="youGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <linearGradient
+                  id="youGradient"
+                  x1="0%"
+                  y1="0%"
+                  x2="100%"
+                  y2="100%"
+                >
                   <stop offset="0%" stopColor="hsl(45, 93%, 58%)" />
                   <stop offset="100%" stopColor="hsl(32, 95%, 44%)" />
                 </linearGradient>
                 <filter id="glow">
-                  <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+                  <feGaussianBlur stdDeviation="4" result="coloredBlur" />
                   <feMerge>
-                    <feMergeNode in="coloredBlur"/>
-                    <feMergeNode in="SourceGraphic"/>
+                    <feMergeNode in="coloredBlur" />
+                    <feMergeNode in="SourceGraphic" />
                   </feMerge>
                 </filter>
               </defs>
@@ -118,37 +143,42 @@ export default function NetworkVisualization() {
               </text>
 
               {/* User count labels - stacked below center */}
-              {networkLevels.filter(l => l.isActive).map((level, index) => (
-                <g key={`count-${level.level}`} transform={`translate(${centerX}, ${centerY + 55 + (index * 28)})`}>
-                  <rect
-                    x="-45"
-                    y="-12"
-                    width="90"
-                    height="24"
-                    rx="12"
-                    fill="hsl(var(--card))"
-                    stroke={level.color}
-                    strokeWidth="2"
-                  />
-                  <text
-                    x="0"
-                    y="5"
-                    textAnchor="middle"
-                    fill="hsl(var(--foreground))"
-                    fontSize="12"
-                    fontWeight="600"
+              {networkLevels
+                .filter((l) => l.isActive)
+                .map((level, index) => (
+                  <g
+                    key={`count-${level.level}`}
+                    transform={`translate(${centerX}, ${centerY + 55 + index * 28})`}
                   >
-                    {level.count} users
-                  </text>
-                </g>
-              ))}
+                    <rect
+                      x="-45"
+                      y="-12"
+                      width="90"
+                      height="24"
+                      rx="12"
+                      fill="hsl(var(--card))"
+                      stroke={level.color}
+                      strokeWidth="2"
+                    />
+                    <text
+                      x="0"
+                      y="5"
+                      textAnchor="middle"
+                      fill="hsl(var(--foreground))"
+                      fontSize="12"
+                      fontWeight="600"
+                    >
+                      {level.count} users
+                    </text>
+                  </g>
+                ))}
             </svg>
           </div>
-          
+
           {/* Level Stats - Right Column */}
           <div className="grid grid-cols-2 gap-3">
             {networkLevels.map((level) => {
-              const tier = membershipTiers.find(t => t.level === level.level);
+              const tier = membershipTiers.find((t) => t.level === level.level);
               return (
                 <div
                   key={level.level}
@@ -157,10 +187,12 @@ export default function NetworkVisualization() {
                       ? "bg-primary/5 hover:bg-primary/10"
                       : "bg-muted/50 border-border hover:bg-muted"
                   }`}
-                  style={{ 
-                    borderColor: level.isActive ? level.color : undefined, 
-                    borderLeftWidth: level.isActive ? '4px' : undefined,
-                    boxShadow: level.isActive ? `0 0 0 0 ${level.colorLight}` : undefined,
+                  style={{
+                    borderColor: level.isActive ? level.color : undefined,
+                    borderLeftWidth: level.isActive ? "4px" : undefined,
+                    boxShadow: level.isActive
+                      ? `0 0 0 0 ${level.colorLight}`
+                      : undefined,
                   }}
                   onMouseEnter={(e) => {
                     if (level.isActive) {
@@ -168,19 +200,26 @@ export default function NetworkVisualization() {
                     }
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.boxShadow = "none";
                   }}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-lg">{tier?.icon}</span>
-                    <p className={`text-2xl font-bold ${level.isActive ? "text-foreground" : "text-muted-foreground"}`}>
+                    <p
+                      className={`text-2xl font-bold ${level.isActive ? "text-foreground" : "text-muted-foreground"}`}
+                    >
                       {level.count}
                     </p>
                   </div>
-                  <span className="text-sm font-semibold" style={{ color: level.isActive ? level.color : undefined }}>
+                  <span
+                    className="text-sm font-semibold"
+                    style={{ color: level.isActive ? level.color : undefined }}
+                  >
                     {level.name}
                   </span>
-                  <span className="text-xs text-muted-foreground">${tier?.price}</span>
+                  <span className="text-xs text-muted-foreground">
+                    ${tier?.price}
+                  </span>
                 </div>
               );
             })}
