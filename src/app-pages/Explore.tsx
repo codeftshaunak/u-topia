@@ -229,7 +229,7 @@ export default function Explore() {
           </div>
         </div>
 
-        {/* $U Tokens Card */}
+        {/* Rank Level Card */}
         <div className="relative overflow-hidden rounded-xl h-40 group">
           <img
             src={cardTokens}
@@ -240,17 +240,17 @@ export default function Explore() {
           <div className="relative h-full p-5 flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-white/90">
-                $U Tokens
+                Rank Level
               </span>
               <TrendingUp className="h-5 w-5 text-white/70" />
             </div>
             <div>
-              <div className="text-3xl font-bold text-white">5,240</div>
-              <p className="text-sm text-white/80 flex items-center mt-1">
+              <div className="text-3xl font-bold text-white">10</div>
+              {/* <p className="text-sm text-white/80 flex items-center mt-1">
                 <ArrowUpRight className="h-4 w-4 text-emerald-400 mr-1" />
                 <span className="text-emerald-400 font-medium">+15%</span>
                 <span className="ml-1">value</span>
-              </p>
+              </p> */}
             </div>
           </div>
         </div>
@@ -517,7 +517,7 @@ export default function Explore() {
           </Card>
 
           {/* Your Connections */}
-          <Card>
+          {/* <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Your Connections</CardTitle>
@@ -564,10 +564,10 @@ export default function Explore() {
                 ))}
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
 
           {/* Recent Activity */}
-          <RecentActivity />
+          {/* <RecentActivity /> */}
 
           {/* Upcoming Events */}
           <Card>

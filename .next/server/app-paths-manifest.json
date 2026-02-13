@@ -4,8 +4,5 @@
   "/api/referrals/link/route": "app/api/referrals/link/route.js",
   "/api/referrals/route": "app/api/referrals/route.js",
   "/api/profile/route": "app/api/profile/route.js",
-  "/api/auth/signout/route": "app/api/auth/signout/route.js",
-  "/api/auth/signin/route": "app/api/auth/signin/route.js",
-  "/api/admin/check/route": "app/api/admin/check/route.js",
   "/[[...slug]]/page": "app/[[...slug]]/page.js"
 }

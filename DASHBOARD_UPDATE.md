@@ -9,6 +9,7 @@ The unified project now uses the **Membership Dashboard** (from port 8081) as th
 ## 🔄 What Changed
 
 ### 1. Dashboard Replacement
+
 - **Old**: Affiliate Hub dashboard was at `/dashboard`
 - **New**: Membership dashboard is now at `/dashboard`
 - **Bonus**: Affiliate Hub dashboard moved to `/affiliate` (still accessible)
@@ -16,10 +17,12 @@ The unified project now uses the **Membership Dashboard** (from port 8081) as th
 ### 2. Files Modified
 
 #### Pages
+
 - ✅ `src/pages/Dashboard.tsx` - Now contains the Membership dashboard
 - ✅ `src/pages/AffiliateDashboard.tsx` - Renamed from original Dashboard.tsx (affiliate version)
 
 #### Routing
+
 - ✅ `src/App.tsx` - Updated routing configuration
 
 ---
@@ -27,23 +30,31 @@ The unified project now uses the **Membership Dashboard** (from port 8081) as th
 ## 🎯 Current Routing Structure
 
 ### Main Dashboard Route
+
 ```tsx
-<Route path="/dashboard" element={
-  <ProtectedRoute>
-    <Layout>
-      <Dashboard />  {/* Membership Dashboard */}
-    </Layout>
-  </ProtectedRoute>
-} />
+<Route
+  path="/dashboard"
+  element={
+    <ProtectedRoute>
+      <Layout>
+        <Dashboard /> {/* Membership Dashboard */}
+      </Layout>
+    </ProtectedRoute>
+  }
+/>
 ```
 
 ### Affiliate Dashboard Route (New)
+
 ```tsx
-<Route path="/affiliate" element={
-  <ProtectedRoute>
-    <AffiliateDashboard />  {/* Affiliate Hub Dashboard */}
-  </ProtectedRoute>
-} />
+<Route
+  path="/affiliate"
+  element={
+    <ProtectedRoute>
+      <AffiliateDashboard /> {/* Affiliate Hub Dashboard */}
+    </ProtectedRoute>
+  }
+/>
 ```
 
 ---
@@ -51,9 +62,11 @@ The unified project now uses the **Membership Dashboard** (from port 8081) as th
 ## 📊 Dashboard Features Comparison
 
 ### Membership Dashboard (Now at /dashboard)
+
 **Features from Port 8081:**
+
 - ✅ Shareholder portal view
-- ✅ Total earnings, pending, $U tokens display
+- ✅ Total earnings, pending, Rank Level display
 - ✅ Network size (85 connections)
 - ✅ Referral code with social sharing (WhatsApp, Telegram, Email)
 - ✅ Latest news & updates with video embed
@@ -65,7 +78,9 @@ The unified project now uses the **Membership Dashboard** (from port 8081) as th
 - ✅ Wrapped in Layout with sidebar navigation
 
 ### Affiliate Dashboard (Now at /affiliate)
+
 **Features from Port 8082:**
+
 - ✅ Earnings overview with charts
 - ✅ Referral tracking
 - ✅ Commission breakdown
@@ -101,17 +116,18 @@ The unified project now uses the **Membership Dashboard** (from port 8081) as th
 
 ## 📍 URL Mapping
 
-| URL | Dashboard Type | Layout | Features |
-|-----|---------------|--------|----------|
-| `/dashboard` | **Membership** | ✅ With Sidebar | Community + Shareholder |
-| `/affiliate` | **Affiliate Hub** | ❌ No Sidebar | Earnings + Referrals |
-| `/admin` | **Admin** | ❌ No Sidebar | Admin Controls |
+| URL          | Dashboard Type    | Layout          | Features                |
+| ------------ | ----------------- | --------------- | ----------------------- |
+| `/dashboard` | **Membership**    | ✅ With Sidebar | Community + Shareholder |
+| `/affiliate` | **Affiliate Hub** | ❌ No Sidebar   | Earnings + Referrals    |
+| `/admin`     | **Admin**         | ❌ No Sidebar   | Admin Controls          |
 
 ---
 
 ## 🎨 Design Consistency
 
 ### Membership Dashboard (/dashboard)
+
 - Uses Layout component with sidebar
 - Consistent with other community pages
 - Full shareholder portal experience
@@ -120,6 +136,7 @@ The unified project now uses the **Membership Dashboard** (from port 8081) as th
 - Connection management
 
 ### Affiliate Dashboard (/affiliate)
+
 - Standalone page
 - Focus on earnings and metrics
 - Chart-heavy analytics view
@@ -133,7 +150,9 @@ The unified project now uses the **Membership Dashboard** (from port 8081) as th
 You may want to add a link to the Affiliate Dashboard in:
 
 ### 1. Sidebar Navigation
+
 Add in `app-sidebar.tsx`:
+
 ```tsx
 {
   title: "Affiliate Dashboard",
@@ -143,7 +162,9 @@ Add in `app-sidebar.tsx`:
 ```
 
 ### 2. Bottom Navigation
+
 Add in `BottomNav.tsx`:
+
 ```tsx
 {
   name: "Affiliate",
@@ -153,6 +174,7 @@ Add in `BottomNav.tsx`:
 ```
 
 ### 3. Membership Dashboard
+
 Add a card or button in Dashboard.tsx to link to affiliate features.
 
 ---
@@ -160,6 +182,7 @@ Add a card or button in Dashboard.tsx to link to affiliate features.
 ## ✅ Testing Checklist
 
 ### Test the New Dashboard
+
 1. ✅ Visit http://localhost:8080/
 2. ✅ Log in or sign up
 3. ✅ Should redirect to `/dashboard`
@@ -170,6 +193,7 @@ Add a card or button in Dashboard.tsx to link to affiliate features.
 8. ✅ Verify all cards display correctly
 
 ### Test Affiliate Dashboard
+
 1. ✅ Navigate to http://localhost:8080/affiliate
 2. ✅ Verify affiliate dashboard loads
 3. ✅ Check earnings charts display
@@ -177,6 +201,7 @@ Add a card or button in Dashboard.tsx to link to affiliate features.
 5. ✅ Verify no sidebar (standalone view)
 
 ### Test Other Routes
+
 1. ✅ `/messages` - Should work with sidebar
 2. ✅ `/members` - Should work with sidebar
 3. ✅ `/files` - Should work with sidebar
@@ -188,7 +213,9 @@ Add a card or button in Dashboard.tsx to link to affiliate features.
 ## 📝 Import Fixes Applied
 
 ### Dashboard.tsx
+
 Fixed import paths for community components:
+
 ```tsx
 // Before
 import NetworkVisualization from "@/components/NetworkVisualization";
@@ -206,6 +233,7 @@ import RecentActivity from "@/components/community/RecentActivity";
 ### What You Get Now
 
 **Default Experience (Port 8080 after login):**
+
 - ✅ Membership dashboard from port 8081
 - ✅ Full shareholder portal view
 - ✅ Sidebar navigation for community features
@@ -213,12 +241,14 @@ import RecentActivity from "@/components/community/RecentActivity";
 - ✅ News, events, and connections
 
 **Affiliate Features:**
+
 - ✅ Still accessible at `/affiliate`
 - ✅ All earnings tracking intact
 - ✅ Commission management preserved
 - ✅ Can be linked from main dashboard
 
 **Community Features:**
+
 - ✅ All accessible via sidebar
 - ✅ Messages, Members, Files, etc.
 - ✅ Consistent navigation
@@ -228,11 +258,11 @@ import RecentActivity from "@/components/community/RecentActivity";
 
 ## 🌐 All Servers Status
 
-| Port | Project | Default Dashboard |
-|------|---------|-------------------|
-| 8080 | **Unified** | Membership Dashboard |
-| 8081 | Membership | Membership Dashboard |
-| 8082 | Affiliate Hub | Affiliate Dashboard |
+| Port | Project       | Default Dashboard    |
+| ---- | ------------- | -------------------- |
+| 8080 | **Unified**   | Membership Dashboard |
+| 8081 | Membership    | Membership Dashboard |
+| 8082 | Affiliate Hub | Affiliate Dashboard  |
 
 **The unified project now matches the membership project's dashboard experience!**
 
