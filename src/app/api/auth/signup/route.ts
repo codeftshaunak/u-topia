@@ -69,10 +69,8 @@ export async function POST(request: NextRequest) {
       emailVerified: user.emailVerified,
     });
 
-    // Set cookie
-    await setAuthCookie(token);
-
-    return NextResponse.json({
+    // Create response with cookie
+    const response = NextResponse.json({
       user: {
         id: user.id,
         email: user.email,
@@ -81,6 +79,17 @@ export async function POST(request: NextRequest) {
       },
       token,
     });
+
+    // Set auth cookie on response
+    response.cookies.set('auth-token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: '/',
+    });
+
+    return response;
   } catch (error) {
     console.error('Signup error:', error);
     return NextResponse.json(

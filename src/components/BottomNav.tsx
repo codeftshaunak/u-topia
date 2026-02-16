@@ -19,7 +19,9 @@ const BottomNav = () => {
     const checkAdminStatus = async () => {
       if (user?.email) {
         try {
-          const response = await fetch("/api/admin/check");
+          const response = await fetch("/api/admin/check", {
+            credentials: 'same-origin',
+          });
           const data = await response.json();
           setIsAdmin(data.isAdmin || false);
         } catch (error) {

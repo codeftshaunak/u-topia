@@ -85,6 +85,7 @@ const ResetPassword = () => {
           token,
           newPassword: formData.newPassword,
         }),
+        credentials: 'same-origin',
       });
 
       const data = await response.json();

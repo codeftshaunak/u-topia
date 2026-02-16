@@ -84,7 +84,9 @@ const ProfileSettings = () => {
       }
 
       try {
-        const response = await fetch("/api/profile");
+        const response = await fetch("/api/profile", {
+          credentials: 'same-origin',
+        });
         const data = await response.json();
 
         if (data.profile) {

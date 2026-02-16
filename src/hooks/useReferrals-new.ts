@@ -35,7 +35,9 @@ export function useReferrals() {
     try {
       setError(null);
 
-      const response = await fetch('/api/referrals');
+      const response = await fetch('/api/referrals', {
+        credentials: 'same-origin',
+      });
 
       if (!response.ok) {
         throw new Error('Failed to fetch referrals');

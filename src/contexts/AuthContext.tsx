@@ -40,7 +40,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshSession = async () => {
     try {
-      const response = await fetch('/api/auth/session');
+      const response = await fetch('/api/auth/session', {
+        credentials: 'same-origin',
+      });
       const data = await response.json();
 
       if (data.user) {
@@ -63,6 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
+      credentials: 'same-origin',
     });
 
     const data = await response.json();
@@ -84,6 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, fullName, mobile }),
+      credentials: 'same-origin',
     });
 
     const data = await response.json();
@@ -96,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    await fetch('/api/auth/signout', { method: 'POST' });
+    await fetch('/api/auth/signout', { method: 'POST', credentials: 'same-origin' });
     setUser(null);
     router.push('/auth');
   };
@@ -106,6 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
+      credentials: 'same-origin',
     });
 
     const data = await response.json();
@@ -120,6 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token, newPassword }),
+      credentials: 'same-origin',
     });
 
     const data = await response.json();

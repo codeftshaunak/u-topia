@@ -13,6 +13,7 @@ import ResetPassword from "../app-pages/ResetPassword";
 
 // Membership & Purchase Pages
 import Purchase from "../app-pages/Purchase";
+import Payment from "../app-pages/Payment";
 import PurchaseSuccess from "../app-pages/PurchaseSuccess";
 import ReferAndEarn from "../app-pages/ReferAndEarn";
 import Onboarding from "../app-pages/Onboarding";
@@ -60,6 +61,7 @@ const AppRouter = () => {
 
         {/* Purchase Flow */}
         <Route path="/purchase" element={<Purchase />} />
+        <Route path="/payment" element={<Payment />} />
         <Route path="/purchase-success" element={<PurchaseSuccess />} />
 
         {/* Onboarding */}

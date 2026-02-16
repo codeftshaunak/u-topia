@@ -40,12 +40,13 @@ enum RevenueStatus {
 
 // Models
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  password      String
-  emailVerified DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  email             String    @unique
+  password          String
+  emailVerified     DateTime?
+  fireblocksVaultId String?   @unique  // Per-user Fireblocks vault for payment identification
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   // Relations
   profile              Profile?
@@ -57,6 +58,7 @@ model User {
   commissionsFromUser  Commission[]     @relation("ReferredUserCommissions")
   revenueEvents        RevenueEvent[]
   purchases            Purchase[]
+  paymentSessions      PaymentSession[]
 
   @@map("users")
 }
@@ -229,9 +231,43 @@ model Purchase {
   createdAt              DateTime @default(now())
 
   // Relations
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user           User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  paymentSession PaymentSession?
 
   @@map("purchases")
+}
+
+model PaymentSession {
+  id              String    @id @default(cuid())
+  purchaseId      String    @unique
+  userId          String
+  email           String
+  tier            String
+  amountUsd       Float
+  assetId         String
+  depositAddress  String
+  depositTag      String?
+  vaultAccountId  String
+  externalTxId    String    @unique
+  status          String    @default("pending")
+  fireblocksTxId  String?
+  txHash          String?
+  amountReceived  Float?
+  amountCrypto    Float?
+  isTest          Boolean   @default(false)
+  expiresAt       DateTime
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([depositAddress])
+  @@index([externalTxId])
+  @@index([userId, status])
+  @@index([vaultAccountId, status])
+  @@map("payment_sessions")
 }
 
 model ApprovedRevenueSource {

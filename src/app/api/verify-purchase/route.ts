@@ -1,3 +1,13 @@
+/**
+ * Purchase Verification API
+ *
+ * POST /api/verify-purchase
+ * Body: { paymentId?: string, tier?: string }
+ *
+ * Verifies a completed purchase. Used by the success page after payment.
+ * Checks both the Purchase record and the PaymentSession record.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { getSession } from "@/lib/auth";
@@ -11,69 +21,69 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { paymentId, tier } = body;
+    const { paymentId } = body;
 
-    if (!paymentId) {
-      // If no payment ID, check for any completed purchase for this user
-      const existingPurchase = await prisma.purchase.findFirst({
+    // If a specific payment/session ID is provided, look it up
+    if (paymentId) {
+      // Try PaymentSession first (new flow)
+      const paymentSession = await prisma.paymentSession.findFirst({
         where: {
+          OR: [
+            { id: paymentId },
+            { externalTxId: paymentId },
+          ],
           userId: session.id,
-          status: "completed",
         },
-        orderBy: {
-          createdAt: "desc",
-        },
+        include: { purchase: true },
       });
 
-      if (existingPurchase) {
+      if (paymentSession) {
         return NextResponse.json({
-          verified: true,
+          verified: paymentSession.status === "completed",
+          tier: paymentSession.tier,
+          status: paymentSession.status,
+          txHash: paymentSession.txHash,
           emailSent: false,
-          tier: existingPurchase.tier,
         });
       }
 
-      // No payment ID and no existing purchase
-      return NextResponse.json({
-        verified: false,
-        error: "No payment found",
+      // Fallback: check Purchase by stripeSessionId (backward compat)
+      const purchase = await prisma.purchase.findFirst({
+        where: {
+          stripeSessionId: paymentId,
+          userId: session.id,
+        },
       });
+
+      if (purchase) {
+        return NextResponse.json({
+          verified: purchase.status === "completed",
+          tier: purchase.tier,
+          status: purchase.status,
+          emailSent: false,
+        });
+      }
+
+      return NextResponse.json({ verified: false, error: "Payment not found" });
     }
 
-    // Check if payment exists and is completed
-    const purchase = await prisma.purchase.findFirst({
-      where: {
-        stripeSessionId: paymentId, // Using this field for crypto payment ID
-        userId: session.id,
-      },
+    // No payment ID — check for any completed purchase for this user
+    const latestPurchase = await prisma.purchase.findFirst({
+      where: { userId: session.id, status: "completed" },
+      orderBy: { createdAt: "desc" },
     });
 
-    if (!purchase) {
+    if (latestPurchase) {
       return NextResponse.json({
-        verified: false,
-        error: "Payment not found",
-      });
-    }
-
-    if (purchase.status !== "completed") {
-      return NextResponse.json({
-        verified: false,
+        verified: true,
+        tier: latestPurchase.tier,
         emailSent: false,
-        error: "Payment not completed",
-        status: purchase.status,
       });
     }
 
-    return NextResponse.json({
-      verified: true,
-      emailSent: false,
-      tier: purchase.tier,
-    });
+    return NextResponse.json({ verified: false, error: "No completed purchase found" });
   } catch (error) {
     console.error("Purchase verification error:", error);
-    return NextResponse.json(
-      { error: "Failed to verify purchase" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Failed to verify purchase" }, { status: 500 });
   }
 }
