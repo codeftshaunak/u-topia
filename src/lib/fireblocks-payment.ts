@@ -4,21 +4,21 @@
  * Production-ready crypto payment flow for U-Topia membership purchases.
  *
  * Architecture:
- * - Each user gets their OWN Fireblocks vault account (stored on User model)
- * - Each payment session gets a UNIQUE deposit address
+ * - Single shared Fireblocks vault (configured via FIREBLOCKS_VAULT_ID)
+ * - Each payment session gets a UNIQUE deposit address within that vault
  * - Webhook identifies payments by matching depositAddress in the PaymentSession table
  * - externalTxId ensures idempotency so duplicate tx requests are impossible
  *
  * Flow:
  * 1. User selects tier + crypto asset -> POST /api/checkout
- * 2. Backend creates/retrieves user vault -> generates fresh deposit address
+ * 2. Backend generates fresh deposit address in shared vault
  * 3. PaymentSession record created with address, externalTxId, purchase link
  * 4. Frontend shows address + QR code, polls status
  * 5. Fireblocks webhook fires -> matches depositAddress -> updates PaymentSession & Purchase
  * 6. Frontend detects completion -> redirects to success
  */
 
-import { getFireblocksClient, isFireblocksConfigured } from "./fireblocks";
+import { getFireblocksClient, isFireblocksConfigured, getFireblocksVaultId } from "./fireblocks";
 import prisma from "./db";
 
 // --- Types ---
@@ -91,84 +91,21 @@ function getSupportedAssets() {
 
 export const SUPPORTED_ASSETS = getSupportedAssets();
 
-// --- Vault Management (Per-User) ---
+// --- Vault Management ---
 
 /**
- * Get or create a Fireblocks vault account for a specific user.
- *
- * Each user gets their OWN vault so incoming transactions can be
- * unambiguously attributed via the webhook destination.id field.
- * The vault ID is persisted on the User record (created once).
+ * Get the shared Fireblocks vault ID for all payments.
+ * This vault is pre-created and configured via FIREBLOCKS_VAULT_ID environment variable.
+ * All users' deposit addresses are generated within this single vault.
  */
-export async function getOrCreateUserVault(
-  userId: string,
-  userName?: string
-): Promise<string> {
+export async function getVaultId(): Promise<string> {
   if (!isFireblocksConfigured()) {
     throw new Error("Fireblocks is not configured");
   }
 
-  // 1. Check if user already has a vault
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { fireblocksVaultId: true, email: true },
-  });
-
-  if (!user) throw new Error("User not found");
-
-  if (user.fireblocksVaultId) {
-    return user.fireblocksVaultId;
-  }
-
-  // 2. Create a new vault for this user in Fireblocks
-  const fireblocks = getFireblocksClient();
-  const vaultName = `utopia_user_${userId.slice(0, 8)}`;
-
-  try {
-    console.log(`Creating Fireblocks vault for user ${userId}: ${vaultName}`);
-    const vault = await fireblocks.vaults.createVaultAccount({
-      createVaultAccountRequest: {
-        name: vaultName,
-        hiddenOnUI: false,
-        autoFuel: false,
-      },
-    });
-
-    const vaultId = vault.data?.id;
-    if (!vaultId) throw new Error("Vault creation returned no ID");
-
-    // 3. Persist the vault ID on the user
-    await prisma.user.update({
-      where: { id: userId },
-      data: { fireblocksVaultId: vaultId },
-    });
-
-    console.log(`Created vault ${vaultId} for user ${userId}`);
-    return vaultId;
-  } catch (error) {
-    const fbErr = error as FireblocksError;
-    const msg = fbErr.response?.data?.message || fbErr.message || String(error);
-
-    // If name already exists, try to find it
-    if (msg.includes("already exists") || msg.includes("duplicate")) {
-      console.log(`Vault name conflict, searching for existing vault...`);
-      const vaults = await fireblocks.vaults.getPagedVaultAccounts({
-        namePrefix: vaultName,
-        limit: 1,
-      });
-      if (vaults.data?.accounts?.[0]?.id) {
-        const existingId = vaults.data.accounts[0].id;
-        await prisma.user.update({
-          where: { id: userId },
-          data: { fireblocksVaultId: existingId },
-        });
-        return existingId;
-      }
-    }
-
-    console.error(`Failed to create vault for user ${userId}:`, msg);
-    throw new Error(`Cannot create payment vault: ${msg}`);
-  }
+  const vaultId = getFireblocksVaultId();
+  console.log(`Using shared Fireblocks vault: ${vaultId}`);
+  return vaultId;
 }
 
 // --- Deposit Address Generation ---
@@ -268,8 +205,8 @@ export async function createPaymentSession(
   const asset = SUPPORTED_ASSETS.find((a) => a.id === assetId);
   if (!asset) throw new Error(`Unsupported asset: ${assetId}`);
 
-  // 1. Get or create per-user vault
-  const vaultAccountId = await getOrCreateUserVault(userId, email.split("@")[0]);
+  // 1. Get shared vault ID
+  const vaultAccountId = await getVaultId();
 
   // 2. Check for existing pending session for same user+tier+asset (prevent dups)
   const existingSession = await prisma.paymentSession.findFirst({
