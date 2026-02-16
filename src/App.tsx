@@ -10,34 +10,36 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import BottomNav from "./components/BottomNav";
 
 // Landing & Auth Pages
-import Index from "./pages/Index";
-import Auth from "./pages/Auth";
-import ResetPassword from "./pages/ResetPassword";
+import Index from "./app-pages/Index";
+import Auth from "./app-pages/Auth";
+import ResetPassword from "./app-pages/ResetPassword";
 
 // Membership & Purchase Pages
-import Purchase from "./pages/Purchase";
-import PurchaseSuccess from "./pages/PurchaseSuccess";
-import ReferAndEarn from "./pages/ReferAndEarn";
-import Onboarding from "./pages/Onboarding";
-import Upgrade from "./pages/Upgrade";
+import Purchase from "./app-pages/Purchase";
+import PurchaseSuccess from "./app-pages/PurchaseSuccess";
+import ReferAndEarn from "./app-pages/ReferAndEarn";
+import Onboarding from "./app-pages/Onboarding";
+import Upgrade from "./app-pages/Upgrade";
 
 // Dashboard Pages
-import Dashboard from "./pages/Dashboard";
-import AffiliateDashboard from "./pages/AffiliateDashboard";
-import ProfileSettings from "./pages/ProfileSettings";
+import Dashboard from "./app-pages/Dashboard";
+import DashboardPurchase from "./app-pages/DashboardPurchase";
+import AffiliateDashboard from "./app-pages/AffiliateDashboard";
+import ProfileSettings from "./app-pages/ProfileSettings";
 
 // Community Pages (from membership project)
-import Messages from "./pages/Messages";
-import Members from "./pages/Members";
-import Files from "./pages/Files";
-import About from "./pages/About";
-import Contact from "./pages/Contact";
-import Settings from "./pages/Settings";
+import Explore from "./app-pages/Explore";
+import Messages from "./app-pages/Messages";
+import Members from "./app-pages/Members";
+import Files from "./app-pages/Files";
+import About from "./app-pages/About";
+import Contact from "./app-pages/Contact";
+import Settings from "./app-pages/Settings";
 
 // Admin Pages
-import AdminDashboard from "./pages/AdminDashboard";
-import AdminUserDetail from "./pages/AdminUserDetail";
-import ShareholderPortal from "./pages/ShareholderPortal";
+import AdminDashboard from "./app-pages/AdminDashboard";
+import AdminUserDetail from "./app-pages/AdminUserDetail";
+import ShareholderPortal from "./app-pages/ShareholderPortal";
 
 const queryClient = new QueryClient();
 
@@ -82,6 +84,16 @@ const App = () => (
                 }
               />
               <Route
+                path="/dashboard/purchase"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <DashboardPurchase />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/affiliate"
                 element={
                   <ProtectedRoute>
@@ -99,6 +111,16 @@ const App = () => (
               />
 
               {/* Community Features (Membership) */}
+              <Route
+                path="/explore"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Explore />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/messages"
                 element={

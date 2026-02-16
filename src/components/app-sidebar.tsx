@@ -8,6 +8,7 @@ import {
   Gem,
   TrendingUp,
   Compass,
+  ShoppingCart,
 } from "lucide-react";
 const utopiaLogoLight = "/utopia-logo.avif";
 const utopiaLogoOriginal = "/u-topia-logo-dark.png";
@@ -33,6 +34,7 @@ import { Button } from "@/components/ui/button";
 const mainItems = [
   { title: "Explore", url: "/explore", icon: Compass },
   { title: "Dashboard", url: "/dashboard", icon: TrendingUp },
+  { title: "Purchase", url: "/dashboard/purchase", icon: ShoppingCart },
   { title: "About U-topia", url: "/about", icon: Info },
   { title: "Upgrade", url: "/upgrade", icon: Gem },
 ];

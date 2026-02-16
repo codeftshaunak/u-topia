@@ -21,6 +21,7 @@ import Upgrade from "../app-pages/Upgrade";
 // Dashboard Pages
 import Explore from "../app-pages/Explore";
 import Dashboard from "../app-pages/Dashboard";
+import DashboardPurchase from "../app-pages/DashboardPurchase";
 import AffiliateDashboard from "../app-pages/AffiliateDashboard";
 import ProfileSettings from "../app-pages/ProfileSettings";
 
@@ -89,6 +90,16 @@ const AppRouter = () => {
             <ProtectedRoute>
               <Layout>
                 <Dashboard />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard/purchase"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <DashboardPurchase />
               </Layout>
             </ProtectedRoute>
           }
