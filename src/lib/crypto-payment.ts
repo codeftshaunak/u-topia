@@ -1,4 +1,5 @@
 import axios from "axios";
+import crypto from "crypto";
 
 // NOWPayments API configuration
 const NOWPAYMENTS_API_URL = "https://api.nowpayments.io/v1";
@@ -169,7 +170,6 @@ export function verifyWebhookSignature(
     return true; // Allow in development
   }
 
-  const crypto = require("crypto");
   const hmac = crypto.createHmac("sha512", process.env.NOWPAYMENTS_IPN_SECRET);
   hmac.update(payload);
   const expectedSignature = hmac.digest("hex");

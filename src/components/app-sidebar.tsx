@@ -33,7 +33,6 @@ import { Button } from "@/components/ui/button";
 const mainItems = [
   { title: "Explore", url: "/explore", icon: Compass },
   { title: "Dashboard", url: "/dashboard", icon: TrendingUp },
-  { title: "My Network", url: "/members", icon: Users },
   { title: "About U-topia", url: "/about", icon: Info },
   { title: "Upgrade", url: "/upgrade", icon: Gem },
 ];

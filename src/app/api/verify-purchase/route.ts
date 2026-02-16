@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
 import prisma from "@/lib/db";
 import { getSession } from "@/lib/auth";
 
@@ -12,87 +11,64 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { sessionId, tier } = body;
+    const { paymentId, tier } = body;
 
-    if (!sessionId) {
-      // If no session ID, assume success (direct navigation)
+    if (!paymentId) {
+      // If no payment ID, check for any completed purchase for this user
+      const existingPurchase = await prisma.purchase.findFirst({
+        where: {
+          userId: session.id,
+          status: "completed",
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+      if (existingPurchase) {
+        return NextResponse.json({
+          verified: true,
+          emailSent: false,
+          tier: existingPurchase.tier,
+        });
+      }
+
+      // No payment ID and no existing purchase
       return NextResponse.json({
-        verified: true,
-        emailSent: false,
+        verified: false,
+        error: "No payment found",
       });
     }
 
-    // Verify with Stripe
-    const checkoutSession = await stripe.checkout.sessions.retrieve(sessionId);
+    // Check if payment exists and is completed
+    const purchase = await prisma.purchase.findFirst({
+      where: {
+        stripeSessionId: paymentId, // Using this field for crypto payment ID
+        userId: session.id,
+      },
+    });
 
-    if (checkoutSession.payment_status !== "paid") {
+    if (!purchase) {
+      return NextResponse.json({
+        verified: false,
+        error: "Payment not found",
+      });
+    }
+
+    if (purchase.status !== "completed") {
       return NextResponse.json({
         verified: false,
         emailSent: false,
         error: "Payment not completed",
+        status: purchase.status,
       });
     }
 
-    // Verify the session belongs to the current user
-    if (checkoutSession.metadata?.userId !== session.userId) {
-      return NextResponse.json(
-        {
-          verified: false,
-          error: "Session mismatch",
-        },
-        { status: 403 },
-      );
-    }
-
-    const purchaseTier = checkoutSession.metadata?.tier || tier;
-    const amountPaid = checkoutSession.amount_total || 0;
-
-    // Record the purchase in the database
-    try {
-      await prisma.purchase.create({
-        data: {
-          userId: session.userId,
-          tier: purchaseTier.toLowerCase(),
-          amount: amountPaid,
-          status: "completed",
-          stripeSessionId: sessionId,
-          stripePaymentIntentId: checkoutSession.payment_intent as string,
-        },
-      });
-
-      // Update user's affiliate tier
-      await prisma.affiliateStatus.upsert({
-        where: { userId: session.userId },
-        create: {
-          userId: session.userId,
-          tier: purchaseTier.toLowerCase(),
-          tierDepthLimit: getTierDepth(purchaseTier),
-          isActive: true,
-        },
-        update: {
-          tier: purchaseTier.toLowerCase(),
-          tierDepthLimit: getTierDepth(purchaseTier),
-          isActive: true,
-          updatedAt: new Date(),
-        },
-      });
-
-      // TODO: Send confirmation email
-      // This could be implemented using a service like SendGrid, Resend, or AWS SES
-
-      return NextResponse.json({
-        verified: true,
-        emailSent: false, // Set to true when email is implemented
-        tier: purchaseTier,
-      });
-    } catch (dbError) {
-      console.error("Database error during purchase verification:", dbError);
-      return NextResponse.json({
-        verified: true, // Payment was successful
-        emailSent: false,
-        error: "Failed to update records",
-      });
-    }
+    return NextResponse.json({
+      verified: true,
+      emailSent: false,
+      tier: purchase.tier,
+    });
   } catch (error) {
     console.error("Purchase verification error:", error);
     return NextResponse.json(
@@ -100,16 +76,4 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
-}
-
-// Helper function to get tier depth
-function getTierDepth(tier: string): number {
-  const depths: Record<string, number> = {
-    bronze: 1,
-    silver: 2,
-    gold: 3,
-    platinum: 4,
-    diamond: 5,
-  };
-  return depths[tier.toLowerCase()] || 1;
 }

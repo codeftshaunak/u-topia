@@ -26,7 +26,6 @@ import ProfileSettings from "../app-pages/ProfileSettings";
 
 // Community Pages (from membership project)
 import Messages from "../app-pages/Messages";
-import Members from "../app-pages/Members";
 import Files from "../app-pages/Files";
 import About from "../app-pages/About";
 import Contact from "../app-pages/Contact";
@@ -128,16 +127,6 @@ const AppRouter = () => {
             <ProtectedRoute>
               <Layout>
                 <Messages />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/members"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Members />
               </Layout>
             </ProtectedRoute>
           }
