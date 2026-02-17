@@ -92,6 +92,7 @@ async function testPermissions() {
         autoFuel: false,
       },
     });
+
     console.log(`   ✅ SUCCESS - Created vault: ${vault.data?.name} (ID: ${vault.data?.id})`);
 
     // Clean up - try to rename it
@@ -109,8 +110,10 @@ async function testPermissions() {
       }
     }
   } catch (error) {
-    console.log(`   ❌ FAILED - ${error.message}`);
-    if (error.message?.includes("Unauthorized")) {
+    const errorMsg = error.response?.data?.message || error.message || String(error);
+    const statusCode = error.response?.status || error.response?.statusCode || 'unknown';
+    console.log(`   ❌ FAILED - ${errorMsg} (Status: ${statusCode})`);
+    if (errorMsg.includes("Unauthorized") || errorMsg.includes("Forbidden")) {
       console.log(`\n   ⚠️  Your API credentials don't have permission to create vaults!`);
       console.log(`   ⚠️  Please check your Fireblocks API User permissions in the console.`);
     }

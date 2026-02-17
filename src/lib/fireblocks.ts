@@ -14,7 +14,6 @@ const FIREBLOCKS_API_KEY = process.env.FIREBLOCKS_API_KEY;
 const FIREBLOCKS_SECRET_KEY = process.env.FIREBLOCKS_SECRET_KEY;
 const FIREBLOCKS_SECRET_KEY_PATH = process.env.FIREBLOCKS_SECRET_KEY_PATH;
 const FIREBLOCKS_BASE_PATH = process.env.FIREBLOCKS_BASE_PATH || "sandbox";
-const FIREBLOCKS_VAULT_ID = process.env.FIREBLOCKS_VAULT_ID;
 
 // Determine the base path (sandbox or production)
 function getBasePath(): string {
@@ -120,17 +119,7 @@ export function getFireblocksClient(): Fireblocks {
  * Check if Fireblocks is properly configured
  */
 export function isFireblocksConfigured(): boolean {
-  return !!(FIREBLOCKS_API_KEY && (FIREBLOCKS_SECRET_KEY || FIREBLOCKS_SECRET_KEY_PATH) && FIREBLOCKS_VAULT_ID);
-}
-
-/**
- * Get the configured Fireblocks vault ID
- */
-export function getFireblocksVaultId(): string {
-  if (!FIREBLOCKS_VAULT_ID) {
-    throw new Error("FIREBLOCKS_VAULT_ID is not configured in environment variables");
-  }
-  return FIREBLOCKS_VAULT_ID;
+  return !!(FIREBLOCKS_API_KEY && (FIREBLOCKS_SECRET_KEY || FIREBLOCKS_SECRET_KEY_PATH));
 }
 
 // Export types for external use
