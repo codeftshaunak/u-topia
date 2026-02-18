@@ -5,12 +5,12 @@
  *   - TRANSACTION_CREATED     → logs detection
  *   - TRANSACTION_STATUS_UPDATED → matches payment session, updates status
  *
- * Payment identification strategy:
- *   1. Primary:  Match by destinationAddress → PaymentSession.depositAddress
- *   2. Fallback: Match by destination vault ID → PaymentSession.vaultAccountId
+ * INTELLIGENT PAYMENT MATCHING STRATEGY:
+ *   - UTXO chains (BTC): Match by unique depositAddress
+ *   - Account-based chains (ETH, USDT, USDC, SOL): Match by vaultId + amount
  *
- * This ensures each of thousands of concurrent users gets their payment
- * correctly attributed even when transactions arrive simultaneously.
+ * Why? Account-based chains reuse the SAME address for all payments to a vault,
+ * so we must use the payment AMOUNT to determine which package tier was purchased.
  *
  * POST /api/webhooks/fireblocks
  */
@@ -18,15 +18,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import prisma from "@/lib/db";
+import { AffiliateTier } from "@prisma/client";
 import {
   findSessionByDepositAddress,
   findSessionByVaultId,
+  findSessionByVaultAndAmount,
+  isUTXOChain,
+  isAccountBasedChain,
   isPaymentSufficient,
   getTierFromAmount,
   getTierDepth,
   TIER_PACKAGES,
   expireOldSessions,
 } from "@/lib/fireblocks-payment";
+import {
+  WebhookPayload,
+  WebhookTransactionData,
+  WEBHOOK_EVENT_TYPES,
+  TRANSACTION_STATUS,
+  ACCOUNT_TYPES,
+} from "./types";
 
 // ─── Fireblocks Public Keys for Signature Verification ───────────────────────
 
@@ -72,34 +83,7 @@ function verifySignature(signature: string, body: string): boolean {
 }
 
 // ─── Webhook Types ───────────────────────────────────────────────────────────
-
-interface WebhookPayload {
-  type: string;
-  tenantId: string;
-  timestamp: number;
-  data: {
-    id: string;
-    status: string;
-    subStatus?: string;
-    txHash?: string;
-    operation: string;
-    assetId: string;
-    source: { type: string; id?: string; name?: string };
-    destination: { type: string; id?: string; name?: string };
-    amountInfo: {
-      amount: string;
-      requestedAmount?: string;
-      netAmount?: string;
-      amountUSD?: string;
-    };
-    destinationAddress?: string;
-    destinationAddressDescription?: string;
-    createdAt: number;
-    lastUpdated: number;
-    customerRefId?: string;
-    externalTxId?: string;
-  };
-}
+// See ./types.ts for WebhookPayload interface definition
 
 // ─── Main Handler ────────────────────────────────────────────────────────────
 
@@ -124,24 +108,24 @@ export async function POST(request: NextRequest) {
   try {
     const payload: WebhookPayload = JSON.parse(body);
 
-    console.log(`[Webhook] ${payload.type}`, {
+    console.log(`[Webhook] ${payload.eventType}`, {
       txId: payload.data?.id,
       status: payload.data?.status,
       asset: payload.data?.assetId,
       destAddress: payload.data?.destinationAddress,
       destVault: payload.data?.destination?.id,
-      amountUSD: payload.data?.amountInfo?.amountUSD,
+      amountUSD: payload.data?.amountUSD,
     });
 
-    switch (payload.type) {
-      case "TRANSACTION_CREATED":
+    switch (payload.eventType) {
+      case "transaction.created":
         await handleTransactionCreated(payload);
         break;
-      case "TRANSACTION_STATUS_UPDATED":
+      case "transaction.status.updated":
         await handleTransactionStatusUpdated(payload);
         break;
       default:
-        console.log(`[Webhook] Unhandled type: ${payload.type}`);
+        console.log(`[Webhook] Unhandled event type: ${payload.eventType}`);
     }
 
     // Opportunistically expire old sessions
@@ -160,13 +144,13 @@ async function handleTransactionCreated(payload: WebhookPayload) {
   const { data } = payload;
 
   // Only incoming to vault accounts
-  if (data.destination.type !== "VAULT_ACCOUNT") return;
+  if (data.destination.type !== ACCOUNT_TYPES.VAULT_ACCOUNT) return;
 
   console.log(`[Webhook] New incoming tx detected:`, {
     txId: data.id,
     asset: data.assetId,
     amount: data.amountInfo.amount,
-    amountUSD: data.amountInfo.amountUSD,
+    amountUSD: data.amountUSD,
     destAddress: data.destinationAddress,
     vaultId: data.destination.id,
   });
@@ -175,14 +159,13 @@ async function handleTransactionCreated(payload: WebhookPayload) {
     data: {
       eventType: "payment_initiated",
       status: "pending",
-      amount: parseFloat(data.amountInfo.amountUSD || "0"),
+      amount: data.amountUSD || 0,
       metadata: {
         transactionId: data.id,
         assetId: data.assetId,
         amount: data.amountInfo.amount,
         vaultAccountId: data.destination.id,
         destinationAddress: data.destinationAddress,
-        txHash: data.txHash,
       },
     },
   });
@@ -193,7 +176,7 @@ async function handleTransactionCreated(payload: WebhookPayload) {
 async function handleTransactionStatusUpdated(payload: WebhookPayload) {
   const { data } = payload;
 
-  if (data.destination.type !== "VAULT_ACCOUNT") return;
+  if (data.destination.type !== ACCOUNT_TYPES.VAULT_ACCOUNT) return;
 
   console.log(`[Webhook] Status update: ${data.status}`, {
     txId: data.id,
@@ -203,16 +186,16 @@ async function handleTransactionStatusUpdated(payload: WebhookPayload) {
   });
 
   switch (data.status) {
-    case "COMPLETED":
+    case TRANSACTION_STATUS.COMPLETED:
       await handleCompleted(data);
       break;
-    case "CONFIRMING":
+    case TRANSACTION_STATUS.CONFIRMING:
       await handleConfirming(data);
       break;
-    case "FAILED":
-    case "CANCELLED":
-    case "REJECTED":
-    case "BLOCKED":
+    case TRANSACTION_STATUS.FAILED:
+    case TRANSACTION_STATUS.CANCELLED:
+    case TRANSACTION_STATUS.REJECTED:
+    case TRANSACTION_STATUS.BLOCKED:
       await handleFailed(data);
       break;
   }
@@ -221,39 +204,83 @@ async function handleTransactionStatusUpdated(payload: WebhookPayload) {
 // ─── Find the matching PaymentSession ────────────────────────────────────────
 
 /**
- * Identify which payment session this transaction belongs to.
+ * INTELLIGENT PAYMENT MATCHING
+ *
+ * Solves the "one vault per user" challenge where account-based chains
+ * (ETH, USDT, USDC, SOL) reuse the SAME address for multiple payments.
  *
  * Strategy:
- *   1. Match by destination address (most reliable — unique per session for UTXO)
- *   2. Fallback to vault ID (works because each user has their own vault)
+ *   1. Match by customerRefId (if available from metadata)
+ *   2. For UTXO chains (BTC): Match by unique depositAddress
+ *   3. For Account-based chains (ETH, etc): Match by vaultId + amount
+ *   4. Fallback: Most recent pending session for vault
  */
 async function findMatchingSession(data: WebhookPayload["data"]) {
-  // 1. Try matching by deposit address
-  if (data.destinationAddress) {
-    const session = await findSessionByDepositAddress(data.destinationAddress);
+  const assetId = data.assetId;
+  const depositAddress = data.destinationAddress;
+  const vaultId = data.destination.id;
+  const amountUsd = data.amountUSD || 0;
+
+  console.log(`[Payment Matching] Asset: ${assetId}, Amount: $${amountUsd}, Vault: ${vaultId}`);
+
+  // 1. Try matching by customerRefId (most reliable)
+  if (data.customerRefId) {
+    const session = await prisma.paymentSession.findFirst({
+      where: { customerRefId: data.customerRefId, status: { in: ["pending", "confirming"] } },
+    });
     if (session) {
-      console.log(`[Webhook] Matched by address: session ${session.id}`);
+      console.log(`[✓] Matched by customerRefId: ${session.tier} (${session.id})`);
       return session;
     }
   }
 
-  // 2. Fallback: match by vault ID (per-user vault ensures correct user)
-  if (data.destination.id) {
-    const session = await findSessionByVaultId(data.destination.id);
+  // 2. For UTXO chains: Match by unique deposit address
+  if (isUTXOChain(assetId) && depositAddress) {
+    const session = await findSessionByDepositAddress(depositAddress);
     if (session) {
-      console.log(`[Webhook] Matched by vaultId: session ${session.id}`);
+      console.log(`[✓] UTXO Match by address: ${session.tier} (${session.id})`);
       return session;
     }
   }
 
+  // 3. For Account-based chains: Match by vault + amount
+  if (isAccountBasedChain(assetId) && vaultId) {
+    const session = await findSessionByVaultAndAmount(vaultId, amountUsd);
+    if (session) {
+      console.log(`[✓] Account-based Match by amount: ${session.tier} (${session.id})`);
+      return session;
+    }
+  }
+
+  // 4. UTXO fallback: Try vault ID (in case address lookup failed)
+  if (isUTXOChain(assetId) && vaultId) {
+    const session = await findSessionByVaultId(vaultId);
+    if (session) {
+      console.log(`[✓] UTXO Fallback by vault: ${session.tier} (${session.id})`);
+      return session;
+    }
+  }
+
+  // 5. Try externalTxId (rare, but possible)
+  if (data.externalTxId) {
+    const session = await prisma.paymentSession.findFirst({
+      where: { externalTxId: data.externalTxId, status: { in: ["pending", "confirming"] } },
+    });
+    if (session) {
+      console.log(`[✓] Matched by externalTxId: ${session.tier} (${session.id})`);
+      return session;
+    }
+  }
+
+  console.warn(`[✗] No matching session found for ${assetId} payment of $${amountUsd}`);
   return null;
 }
 
 // ─── Handle COMPLETED ────────────────────────────────────────────────────────
 
 async function handleCompleted(data: WebhookPayload["data"]) {
-  const amountUsd   = parseFloat(data.amountInfo.amountUSD || "0");
-  const amountCrypto = data.amountInfo.amount;
+  const amountUsd   = data.amountUSD || 0;
+  const amountCrypto = parseFloat(data.amountInfo.amount || "0");
 
   const session = await findMatchingSession(data);
 
@@ -299,7 +326,7 @@ async function handleCompleted(data: WebhookPayload["data"]) {
           fireblocksTxId: data.id,
           txHash: data.txHash,
           amountReceived: amountUsd,
-          amountCrypto,
+          amountCrypto: amountCrypto.toString(),
         },
       }),
       prisma.purchase.update({
@@ -337,7 +364,7 @@ async function handleCompleted(data: WebhookPayload["data"]) {
           fireblocksTxId: data.id,
           txHash: data.txHash,
           amountReceived: amountUsd,
-          amountCrypto,
+          amountCrypto: amountCrypto.toString(),
         },
       }),
 
@@ -347,17 +374,26 @@ async function handleCompleted(data: WebhookPayload["data"]) {
         data: { status: "completed" },
       }),
 
+      // Update User with current package and activation time
+      prisma.user.update({
+        where: { id: session.userId },
+        data: {
+          currentPackage: session.tier as AffiliateTier,
+          packageActivatedAt: new Date(),
+        },
+      }),
+
       // Activate affiliate membership
       prisma.affiliateStatus.upsert({
         where: { userId: session.userId },
         create: {
           userId: session.userId,
-          tier: session.tier as any,
+          tier: session.tier as AffiliateTier,
           tierDepthLimit: getTierDepth(session.tier),
           isActive: true,
         },
         update: {
-          tier: session.tier as any,
+          tier: session.tier as AffiliateTier,
           tierDepthLimit: getTierDepth(session.tier),
           isActive: true,
           updatedAt: new Date(),
@@ -395,6 +431,30 @@ async function handleCompleted(data: WebhookPayload["data"]) {
           },
         },
       }),
+
+      // Store transaction history
+      prisma.transactionHistory.create({
+        data: {
+          purchaseId: session.purchaseId,
+          userId: session.userId,
+          provider: "fireblocks",
+          transactionId: data.id,
+          status: data.status,
+          subStatus: data.subStatus,
+          eventType: "TRANSACTION_COMPLETED",
+          amount: parseFloat(data.amountInfo.amount || "0"),
+          amountUsd: amountUsd,
+          networkFee: parseFloat(data.feeInfo?.networkFee || "0"),
+          currency: data.assetId,
+          txHash: data.txHash,
+          sourceAddress: data.sourceAddress,
+          destinationAddress: data.destinationAddress,
+          blockHeight: data.blockInfo?.blockHeight,
+          blockHash: data.blockInfo?.blockHash,
+          confirmations: data.numOfConfirmations,
+          note: data.note || null,
+        },
+      }),
     ]);
 
     console.log(`[Webhook] PAYMENT COMPLETED: user=${session.userId} tier=${session.tier} amount=$${amountUsd}`);
@@ -418,7 +478,7 @@ async function handleConfirming(data: WebhookPayload["data"]) {
         fireblocksTxId: data.id,
         txHash: data.txHash,
         amountReceived: parseFloat(data.amountInfo.amountUSD || "0"),
-        amountCrypto: data.amountInfo.amount,
+        amountCrypto: data.amountInfo.amount.toString(),
       },
     }),
     prisma.purchase.update({
@@ -441,7 +501,7 @@ async function handleFailed(data: WebhookPayload["data"]) {
       userId: session?.userId,
       userEmail: session?.email,
       status: "failed",
-      amount: parseFloat(data.amountInfo.amountUSD || "0"),
+      amount: data.amountUSD || 0,
       metadata: {
         sessionId: session?.id,
         transactionId: data.id,

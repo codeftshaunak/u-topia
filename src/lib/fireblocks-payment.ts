@@ -5,18 +5,25 @@
  *
  * Architecture:
  * - ONE Fireblocks vault account per user (stored in User.fireblocksVaultId)
- * - Each payment session gets a UNIQUE deposit address within the user's vault
- * - Webhook identifies payments by matching depositAddress in the PaymentSession table
+ * - INTELLIGENT MATCHING for multi-package support:
+ *   • UTXO chains (BTC): Each session gets unique deposit address
+ *   • Account-based (ETH, USDT, etc.): Same address reused, match by amount
+ * - Webhook identifies payments using chain-aware matching strategy
  * - externalTxId ensures idempotency so duplicate tx requests are impossible
  *
  * Flow:
  * 1. User selects tier + crypto asset -> POST /api/checkout
  * 2. Backend gets or creates user's Fireblocks vault (idempotent)
- * 3. Backend generates fresh deposit address in user's vault
- * 4. PaymentSession record created with address, externalTxId, purchase link
+ * 3. Backend generates deposit address (unique for BTC, reused for ETH)
+ * 4. PaymentSession record created with address, tier, externalTxId, purchase link
  * 5. Frontend shows address + QR code, polls status
- * 6. Fireblocks webhook fires -> matches depositAddress -> updates PaymentSession & Purchase
+ * 6. Fireblocks webhook fires -> intelligent matching by chain type
+ *    • BTC: Match by unique depositAddress
+ *    • ETH: Match by vaultId + amountUsd (identifies tier)
  * 7. Frontend detects completion -> redirects to success
+ *
+ * Key Innovation: Amount-based matching for account-based chains solves the
+ * challenge of multiple packages using the same deposit address.
  */
 
 import { isFireblocksConfigured } from "./fireblocks";
@@ -212,6 +219,19 @@ export async function getOrCreateUserVault(userId: string): Promise<string> {
  * For account-based chains (ETH, SOL) it returns the vault's address for that asset.
  * Since each user has their own vault, all addresses are unique per user.
  */
+// --- Deposit Address Generation ---
+
+/**
+ * Get or generate a deposit address for payment.
+ *
+ * IMPORTANT BEHAVIOR BY CHAIN TYPE:
+ *   - UTXO chains (BTC): Creates NEW unique address each time
+ *   - Account-based chains (ETH, USDT, USDC, SOL): Returns SAME address for vault
+ *
+ * This is why we need intelligent matching:
+ *   - BTC: Match by unique depositAddress
+ *   - ETH: Match by vault + amount (address is reused!)
+ */
 async function getDepositAddress(
   vaultAccountId: string,
   assetId: string
@@ -298,6 +318,10 @@ export async function createPaymentSession(
   // 4. Generate unique externalTxId for Fireblocks idempotency
   const externalTxId = `utopia_${userId}_${tier}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
+  // 5. Generate customerRefId for package tracking
+  // Format: package:tier:userId:timestamp
+  const customerRefId = `pkg:${tier}:${userId}:${Date.now()}`;
+
   // 5. Create Purchase + PaymentSession atomically
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
@@ -328,6 +352,7 @@ export async function createPaymentSession(
         depositTag: deposit.tag,
         vaultAccountId,
         externalTxId,
+        customerRefId, // Package tracking reference
         status: "pending",
         isTest: process.env.FIREBLOCKS_BASE_PATH === "sandbox",
         expiresAt,
@@ -389,9 +414,28 @@ export async function getPaymentSessionStatus(sessionId: string, userId: string)
   };
 }
 
+// --- Chain Type Classification ---
+
 /**
- * Find a payment session by its deposit address.
- * Primary matching mechanism used by the webhook handler.
+ * UTXO chains support multiple unique addresses per vault.
+ * Account-based chains have ONE address per vault asset.
+ */
+const UTXO_CHAINS = ["BTC", "BTC_TEST", "LTC", "DOGE", "BCH"];
+const ACCOUNT_BASED_CHAINS = ["ETH", "ETH_TEST5", "USDT_ERC20", "USDC", "SOL", "MATIC"];
+
+export function isUTXOChain(assetId: string): boolean {
+  return UTXO_CHAINS.some(chain => assetId.startsWith(chain));
+}
+
+export function isAccountBasedChain(assetId: string): boolean {
+  return ACCOUNT_BASED_CHAINS.some(chain => assetId.startsWith(chain)) || assetId.includes("_ERC20");
+}
+
+// --- Session Finding Logic ---
+
+/**
+ * Find a payment session by deposit address.
+ * Works perfectly for UTXO chains (BTC) with unique addresses per session.
  */
 export async function findSessionByDepositAddress(depositAddress: string) {
   return prisma.paymentSession.findFirst({
@@ -399,12 +443,30 @@ export async function findSessionByDepositAddress(depositAddress: string) {
       depositAddress,
       status: { in: ["pending", "confirming"] },
     },
+    orderBy: { createdAt: "desc" },
     include: { purchase: true, user: true },
   });
 }
 
 /**
- * Find a payment session by vault account ID (fallback).
+ * Find ALL pending sessions for a vault.
+ * Used for account-based chains where we need to match by amount.
+ */
+export async function findAllPendingSessionsByVault(vaultAccountId: string) {
+  return prisma.paymentSession.findMany({
+    where: {
+      vaultAccountId,
+      status: { in: ["pending", "confirming"] },
+    },
+    orderBy: { createdAt: "desc" },
+    include: { purchase: true, user: true },
+  });
+}
+
+/**
+ * Find a payment session by vault account ID.
+ * For ACCOUNT-BASED chains: matches by vault + amount
+ * For UTXO chains: fallback when address match fails
  */
 export async function findSessionByVaultId(vaultAccountId: string) {
   return prisma.paymentSession.findFirst({
@@ -415,6 +477,39 @@ export async function findSessionByVaultId(vaultAccountId: string) {
     orderBy: { createdAt: "desc" },
     include: { purchase: true, user: true },
   });
+}
+
+/**
+ * INTELLIGENT SESSION MATCHING for account-based chains.
+ * Matches payment to session by comparing received amount with expected package price.
+ */
+export async function findSessionByVaultAndAmount(
+  vaultAccountId: string,
+  amountUsd: number,
+  tolerancePercent: number = 2
+) {
+  const sessions = await findAllPendingSessionsByVault(vaultAccountId);
+
+  if (sessions.length === 0) return null;
+
+  // Try to find exact amount match first
+  for (const session of sessions) {
+    const pkg = TIER_PACKAGES[session.tier];
+    if (!pkg) continue;
+
+    if (isPaymentSufficient(amountUsd, pkg.price, tolerancePercent)) {
+      // Check if amount matches this tier (not higher tier)
+      const maxAmount = pkg.price * (1 + tolerancePercent / 100);
+      if (amountUsd <= maxAmount) {
+        console.log(`[Payment Match] Matched by amount: $${amountUsd} → ${session.tier} (session ${session.id})`);
+        return session;
+      }
+    }
+  }
+
+  // Fallback: return most recent pending session
+  console.warn(`[Payment Match] No exact amount match for $${amountUsd}, using most recent session`);
+  return sessions[0];
 }
 
 /**
