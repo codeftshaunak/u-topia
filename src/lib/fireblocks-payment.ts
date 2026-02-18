@@ -32,6 +32,7 @@ import {
   vaultExists,
   activateVaultAssets,
   generateDepositAddress as generateAddress,
+  activateAssetInVault,
   extractErrorMessage,
   isPermissionError,
 } from "./fireblocks-service";
@@ -138,10 +139,53 @@ export async function getOrCreateUserVault(userId: string): Promise<string> {
   if (user.fireblocksVaultId) {
     const exists = await vaultExists(user.fireblocksVaultId);
     if (exists) {
-      console.log(`Using existing Fireblocks vault ${user.fireblocksVaultId} for user ${userId}`);
-      return user.fireblocksVaultId;
+      // Sanity-check: verify the vault has at least one asset with an address.
+      // A vault can be in a broken state where assets were listed but addresses
+      // were never generated (e.g. activation failed silently on first try).
+      // If broken, fall through and create a fresh vault.
+      const assetIds = SUPPORTED_ASSETS.map(a => a.id);
+      let vaultHealthy = false;
+      for (const assetId of assetIds) {
+        const result = await activateAssetInVault(user.fireblocksVaultId, assetId);
+        if (result.address) {
+          // Fresh activation returned an address — vault is healthy again
+          vaultHealthy = true;
+          break;
+        }
+        // "already exists" — check paginated addresses
+        const { getFireblocksClient } = await import("./fireblocks");
+        const fb = getFireblocksClient();
+        try {
+          const resp = await fb.vaults.getVaultAccountAssetAddressesPaginated({
+            vaultAccountId: user.fireblocksVaultId,
+            assetId,
+          });
+          if (resp.data?.addresses?.[0]?.address) {
+            vaultHealthy = true;
+            break;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (vaultHealthy) {
+        console.log(`Using existing Fireblocks vault ${user.fireblocksVaultId} for user ${userId}`);
+        return user.fireblocksVaultId;
+      }
+
+      console.warn(
+        `Vault ${user.fireblocksVaultId} is broken (assets activated but no addresses). ` +
+        `Creating a new vault for user ${userId}.`
+      );
+      // Clear the broken vault so we fall through to create a fresh one
+      await prisma.user.update({
+        where: { id: userId },
+        data: { fireblocksVaultId: null },
+      });
+    } else {
+      console.warn(`Stored vault ${user.fireblocksVaultId} not found in Fireblocks. Creating new vault.`);
     }
-    console.warn(`Stored vault ${user.fireblocksVaultId} not found in Fireblocks. Creating new vault.`);
   }
 
   // 3. Create new Fireblocks vault for this user

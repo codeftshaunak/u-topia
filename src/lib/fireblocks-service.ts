@@ -28,6 +28,10 @@ export interface DepositAddress {
 export interface AssetActivationResult {
   asset: string;
   status: 'success' | 'failed';
+  /** Deposit address returned by Fireblocks at activation time (only present on first activation). */
+  address?: string;
+  tag?: string;
+  legacyAddress?: string;
   error?: string;
 }
 
@@ -81,28 +85,46 @@ export async function vaultExists(vaultId: string): Promise<boolean> {
 
 // --- Asset Operations ---
 
-export async function activateAssetInVault(vaultId: string, assetId: string): Promise<boolean> {
+/**
+ * Activate an asset wallet in a Fireblocks vault.
+ *
+ * IMPORTANT: The deposit address is ONLY returned by Fireblocks in this
+ * activation response. On EVM chains (ETH, USDT, etc.) it cannot be
+ * retrieved any other way after the fact — so we must capture it here.
+ *
+ * Returns: { activated: boolean, address?, tag?, legacyAddress? }
+ */
+export async function activateAssetInVault(
+  vaultId: string,
+  assetId: string
+): Promise<{ activated: boolean; address?: string; tag?: string; legacyAddress?: string }> {
   const fireblocks = getFireblocksClient();
 
   try {
-    await fireblocks.vaults.createVaultAccountAsset({
+    const resp = await fireblocks.vaults.createVaultAccountAsset({
       vaultAccountId: vaultId,
       assetId: assetId,
     });
-    console.log(`  ✅ Activated ${assetId} in vault ${vaultId}`);
-    return true;
+    const address = resp.data?.address || undefined;
+    console.log(`  ✅ Activated ${assetId} in vault ${vaultId}${address ? ` — address: ${address}` : ''}`);
+    return {
+      activated: true,
+      address,
+      tag: resp.data?.tag || undefined,
+      legacyAddress: resp.data?.legacyAddress || undefined,
+    };
   } catch (err: unknown) {
     const fbErr = err as FireblocksError;
     const msg = fbErr.response?.data?.message || fbErr.message || String(err);
 
-    // Ignore "already exists" errors
+    // "Already exists" — wallet was activated before; address must be read separately
     if (msg.includes('already exists') || msg.includes('Asset already created')) {
       console.log(`  ℹ️  ${assetId} already activated in vault ${vaultId}`);
-      return true;
+      return { activated: true };
     }
 
     console.warn(`  ⚠️  Failed to activate ${assetId} in vault ${vaultId}: ${msg}`);
-    return false;
+    return { activated: false };
   }
 }
 
@@ -116,10 +138,13 @@ export async function activateVaultAssets(
   console.log(`Activating ${assetIds.length} assets in vault ${vaultId}...`);
 
   for (const assetId of assetIds) {
-    const success = await activateAssetInVault(vaultId, assetId);
+    const result = await activateAssetInVault(vaultId, assetId);
     results.push({
       asset: assetId,
-      status: success ? 'success' : 'failed',
+      status: result.activated ? 'success' : 'failed',
+      address: result.address,
+      tag: result.tag,
+      legacyAddress: result.legacyAddress,
     });
   }
 
@@ -136,58 +161,89 @@ export async function activateVaultAssets(
   return results;
 }
 
+// --- Utility Functions ---
+
+export function extractErrorMessage(err: unknown): string {
+  const fbErr = err as FireblocksError;
+  return fbErr.response?.data?.message || fbErr.message || String(err);
+}
+
+export function isPermissionError(err: unknown): boolean {
+  const msg = extractErrorMessage(err);
+  return msg.includes("Unauthorized") ||
+         msg.includes("Forbidden") ||
+         msg.includes("Permission denied");
+}
+
 // --- Address Operations ---
 
+/**
+ * Get the deposit address for a vault asset.
+ *
+ * Strategy:
+ * 1. Call createVaultAccountAsset (activation).
+ *    - On FIRST activation → Fireblocks returns the address directly in the
+ *      response. This is the ONLY reliable way to get the address for EVM
+ *      chains (ETH, USDT, etc.) on Fireblocks sandbox.
+ *    - On subsequent calls → "already exists" error; fall through to step 2.
+ * 2. Read from getVaultAccountAssetAddressesPaginated (with retry/backoff)
+ *    for assets that were activated previously.
+ */
 export async function generateDepositAddress(
   vaultId: string,
-  assetId: string
+  assetId: string,
+  maxRetries = 5,
+  delayMs = 2000
 ): Promise<DepositAddress> {
   const fireblocks = getFireblocksClient();
 
-  // Ensure asset wallet exists in vault
-  await activateAssetInVault(vaultId, assetId);
-
-  // Try to create a new deposit address (works for UTXO chains)
-  try {
-    const newAddr = await fireblocks.vaults.createVaultAccountAssetAddress({
-      vaultAccountId: vaultId,
-      assetId: assetId,
-    });
-
-    if (newAddr.data?.address) {
-      console.log(`Generated new deposit address for ${assetId} in vault ${vaultId}`);
-      return {
-        assetId,
-        address: newAddr.data.address,
-        tag: newAddr.data.tag,
-        legacyAddress: newAddr.data.legacyAddress,
-      };
-    }
-  } catch (err: unknown) {
-    // For EVM chains that don't support multiple addresses, fall back to existing
-    const fbErr = err as FireblocksError;
-    const msg = fbErr.response?.data?.message || fbErr.message || String(err);
-    console.log(`New address creation not supported for ${assetId}, using existing address: ${msg}`);
-  }
-
-  // Fallback: get existing addresses
-  const addresses = await fireblocks.vaults.getVaultAccountAssetAddressesPaginated({
-    vaultAccountId: vaultId,
-    assetId: assetId,
-  });
-
-  if (addresses.data?.addresses?.length) {
-    const addr = addresses.data.addresses[0];
-    console.log(`Using existing deposit address for ${assetId} in vault ${vaultId}`);
+  // Step 1: activate — may return address directly on first activation
+  const activation = await activateAssetInVault(vaultId, assetId);
+  if (activation.address) {
+    console.log(`Deposit address for ${assetId} in vault ${vaultId} (from activation): ${activation.address}`);
     return {
       assetId,
-      address: addr.address || "",
-      tag: addr.tag,
-      legacyAddress: addr.legacyAddress,
+      address: activation.address,
+      tag: activation.tag,
+      legacyAddress: activation.legacyAddress,
     };
   }
 
-  throw new Error(`Cannot generate deposit address for ${assetId} in vault ${vaultId}`);
+  // Step 2: asset was already active — fetch existing address with retry/backoff
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const resp = await fireblocks.vaults.getVaultAccountAssetAddressesPaginated({
+        vaultAccountId: vaultId,
+        assetId: assetId,
+      });
+
+      const addr = resp.data?.addresses?.[0];
+      if (addr?.address) {
+        console.log(`Deposit address for ${assetId} in vault ${vaultId}: ${addr.address} (attempt ${attempt})`);
+        return {
+          assetId,
+          address: addr.address,
+          tag: addr.tag,
+          legacyAddress: addr.legacyAddress,
+        };
+      }
+
+      console.log(`No address yet for ${assetId} in vault ${vaultId} (attempt ${attempt}/${maxRetries}), retrying in ${delayMs}ms...`);
+    } catch (err: unknown) {
+      console.warn(`Error fetching address for ${assetId} (attempt ${attempt}): ${extractErrorMessage(err)}`);
+    }
+
+    if (attempt < maxRetries) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      delayMs = Math.min(delayMs * 1.5, 8000);
+    }
+  }
+
+  throw new Error(
+    `No deposit address found for ${assetId} in vault ${vaultId}. ` +
+    `The vault may be in a broken state (assets activated without addresses). ` +
+    `Clear the user's fireblocksVaultId in the database to force a new vault.`
+  );
 }
 
 
@@ -210,17 +266,4 @@ export async function getAssetAddresses(
   }));
 }
 
-// --- Utility Functions ---
 
-export function extractErrorMessage(err: unknown): string {
-  const fbErr = err as FireblocksError;
-  return fbErr.response?.data?.message || fbErr.message || String(err);
-}
-
-
-export function isPermissionError(err: unknown): boolean {
-  const msg = extractErrorMessage(err);
-  return msg.includes("Unauthorized") ||
-         msg.includes("Forbidden") ||
-         msg.includes("Permission denied");
-}
