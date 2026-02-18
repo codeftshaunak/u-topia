@@ -63,8 +63,10 @@ interface PaymentStatus {
   amountUsd: number;
   assetId: string;
   depositAddress: string;
-  status: "pending" | "confirming" | "completed" | "partial" | "failed" | "expired";
+  status: "pending" | "broadcasting" | "cancelling" | "confirming" | "completed" | "partial" | "failed" | "expired";
   message: string;
+  fireblocksStatus?: string | null;
+  fireblocksStatusLabel?: string | null;
   fireblocksTxId?: string;
   txHash?: string;
   amountReceived?: number;
@@ -297,14 +299,37 @@ const Payment = () => {
     }
   }, [toast]);
 
+  // Map raw Fireblocks status → human-readable label (matches status API)
+  const FIREBLOCKS_STATUS_LABELS: Record<string, string> = {
+    SUBMITTED:                         "Submitted",
+    PENDING_AML_SCREENING:             "Pending Screening",
+    PENDING_ENRICHMENT:                "Pending Security Screening",
+    PENDING_AUTHORIZATION:             "Pending Authorization",
+    QUEUED:                            "Queued",
+    PENDING_SIGNATURE:                 "Pending Signature",
+    PENDING_3RD_PARTY_MANUAL_APPROVAL: "Pending Email Approval",
+    PENDING_3RD_PARTY:                 "Processing at Exchange",
+    BROADCASTING:                      "Broadcasting",
+    CONFIRMING:                        "Confirming",
+    COMPLETED:                         "Completed",
+    SIGNED:                            "Signed",
+    CANCELLING:                        "Cancelling",
+    CANCELLED:                         "Cancelled",
+    BLOCKED:                           "Blocked by Policy",
+    REJECTED:                          "Rejected",
+    FAILED:                            "Failed",
+  };
+
   const getStatusConfig = (status: string) => {
     const configs: Record<string, { icon: React.ReactNode; color: string; bg: string }> = {
-      pending:    { icon: <Clock className="h-5 w-5" />,       color: "text-blue-500",   bg: "bg-blue-500/10" },
-      confirming: { icon: <Loader2 className="h-5 w-5 animate-spin" />, color: "text-yellow-500", bg: "bg-yellow-500/10" },
-      completed:  { icon: <CheckCircle className="h-5 w-5" />, color: "text-green-500",  bg: "bg-green-500/10" },
-      partial:    { icon: <AlertCircle className="h-5 w-5" />, color: "text-orange-500", bg: "bg-orange-500/10" },
-      failed:     { icon: <AlertCircle className="h-5 w-5" />, color: "text-red-500",    bg: "bg-red-500/10" },
-      expired:    { icon: <AlertCircle className="h-5 w-5" />, color: "text-gray-500",   bg: "bg-gray-500/10" },
+      pending:      { icon: <Clock className="h-5 w-5" />,                         color: "text-blue-500",   bg: "bg-blue-500/10" },
+      broadcasting: { icon: <Loader2 className="h-5 w-5 animate-spin" />,          color: "text-blue-400",  bg: "bg-blue-400/10" },
+      cancelling:   { icon: <Loader2 className="h-5 w-5 animate-spin" />,          color: "text-orange-400", bg: "bg-orange-400/10" },
+      confirming:   { icon: <Loader2 className="h-5 w-5 animate-spin" />,          color: "text-yellow-500", bg: "bg-yellow-500/10" },
+      completed:    { icon: <CheckCircle className="h-5 w-5" />,                   color: "text-green-500",  bg: "bg-green-500/10" },
+      partial:      { icon: <AlertCircle className="h-5 w-5" />,                   color: "text-orange-500", bg: "bg-orange-500/10" },
+      failed:       { icon: <AlertCircle className="h-5 w-5" />,                   color: "text-red-500",    bg: "bg-red-500/10" },
+      expired:      { icon: <AlertCircle className="h-5 w-5" />,                   color: "text-gray-500",   bg: "bg-gray-500/10" },
     };
     return configs[status] || configs.pending;
   };
@@ -451,9 +476,19 @@ const Payment = () => {
             <div className={`${statusConfig.bg} rounded-xl p-4 flex items-center gap-3`}>
               <span className={statusConfig.color}>{statusConfig.icon}</span>
               <div className="flex-1">
-                <p className={`font-semibold capitalize ${statusConfig.color}`}>
-                  {paymentStatus?.status || "Pending"}
-                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className={`font-semibold capitalize ${statusConfig.color}`}>
+                    {paymentStatus?.fireblocksStatusLabel
+                      ?? (paymentStatus?.status
+                        ? paymentStatus.status.charAt(0).toUpperCase() + paymentStatus.status.slice(1)
+                        : "Pending")}
+                  </p>
+                  {paymentStatus?.fireblocksStatus && (
+                    <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 text-muted-foreground">
+                      {paymentStatus.fireblocksStatus}
+                    </span>
+                  )}
+                </div>
                 <p className="text-sm text-muted-foreground">
                   {paymentStatus?.message || "Waiting for payment..."}
                 </p>
@@ -603,11 +638,21 @@ const Payment = () => {
                     <span className="text-muted-foreground">Payment</span>
                     <span className="font-medium">{paymentData?.assetName}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Status</span>
-                    <span className={`font-medium capitalize ${statusConfig.color}`}>
-                      {paymentStatus?.status || "pending"}
-                    </span>
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="text-muted-foreground flex-shrink-0">Status</span>
+                    <div className="text-right">
+                      <span className={`font-medium ${statusConfig.color}`}>
+                        {paymentStatus?.fireblocksStatusLabel
+                          ?? (paymentStatus?.status
+                            ? paymentStatus.status.charAt(0).toUpperCase() + paymentStatus.status.slice(1)
+                            : "Pending")}
+                      </span>
+                      {paymentStatus?.fireblocksStatus && (
+                        <p className="text-xs font-mono text-muted-foreground/70 mt-0.5">
+                          {paymentStatus.fireblocksStatus}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   {paymentStatus?.amountReceived && (
                     <div className="flex justify-between">

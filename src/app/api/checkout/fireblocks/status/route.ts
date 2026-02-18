@@ -39,6 +39,29 @@ export async function GET(request: NextRequest) {
       expired:    "Payment session expired. Please create a new session.",
     };
 
+    // Human-readable labels for every raw Fireblocks status code
+    const fireblocksStatusLabels: Record<string, string> = {
+      SUBMITTED:                         "Submitted",
+      PENDING_AML_SCREENING:             "Pending Screening",
+      PENDING_ENRICHMENT:                "Pending Security Screening",
+      PENDING_AUTHORIZATION:             "Pending Authorization",
+      QUEUED:                            "Queued",
+      PENDING_SIGNATURE:                 "Pending Signature",
+      PENDING_3RD_PARTY_MANUAL_APPROVAL: "Pending Email Approval",
+      PENDING_3RD_PARTY:                 "Processing at Exchange",
+      BROADCASTING:                      "Broadcasting",
+      CONFIRMING:                        "Confirming",
+      COMPLETED:                         "Completed",
+      SIGNED:                            "Signed",
+      CANCELLING:                        "Cancelling",
+      CANCELLED:                         "Cancelled",
+      BLOCKED:                           "Blocked by Policy",
+      REJECTED:                          "Rejected",
+      FAILED:                            "Failed",
+    };
+
+    const rawStatus = paymentStatus.fireblocksStatus as string | null;
+
     return NextResponse.json({
       sessionId: paymentStatus.sessionId,
       purchaseId: paymentStatus.purchaseId,
@@ -49,6 +72,8 @@ export async function GET(request: NextRequest) {
       depositTag: paymentStatus.depositTag,
       status: paymentStatus.status,
       message: statusMessages[paymentStatus.status] || "Unknown status",
+      fireblocksStatus: rawStatus ?? null,
+      fireblocksStatusLabel: rawStatus ? (fireblocksStatusLabels[rawStatus] ?? rawStatus) : null,
       fireblocksTxId: paymentStatus.fireblocksTxId,
       txHash: paymentStatus.txHash,
       amountReceived: paymentStatus.amountReceived,

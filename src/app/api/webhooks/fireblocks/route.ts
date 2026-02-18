@@ -35,7 +35,9 @@ import {
   WebhookTransactionData,
   WEBHOOK_EVENT_TYPES,
   TRANSACTION_STATUS,
+  FAILURE_STATUSES,
   ACCOUNT_TYPES,
+  type FireblocksTransactionStatus,
 } from "./types";
 
 // ─── Fireblocks Public Keys for Signature Verification ───────────────────────
@@ -152,6 +154,7 @@ async function handleTransactionCreated(payload: WebhookPayload) {
     amountUSD: data.amountUSD,
     destAddress: data.destinationAddress,
     vaultId: data.destination.id,
+    status: data.status,
   });
 
   await prisma.platformActivity.create({
@@ -165,24 +168,34 @@ async function handleTransactionCreated(payload: WebhookPayload) {
         amount: data.amountInfo.amount,
         vaultAccountId: data.destination.id,
         destinationAddress: data.destinationAddress,
+        fireblocksStatus: data.status,
       },
     },
   });
+
+  // IMPORTANT: Also update the matching payment session with initial status
+  // Many incoming transactions are created already in CONFIRMING status,
+  // so we need to update the session immediately, not just wait for status.updated
+  if (data.status === TRANSACTION_STATUS.CONFIRMING) {
+    await handleConfirming(data);
+  } else if (data.status === TRANSACTION_STATUS.COMPLETED) {
+    await handleCompleted(data);
+  }
 }
 
 // ─── Transaction Status Updated ──────────────────────────────────────────────
 
 async function handleTransactionStatusUpdated(payload: WebhookPayload) {
   const { data } = payload;
-console.log({data});
   if (data.destination.type !== ACCOUNT_TYPES.VAULT_ACCOUNT) return;
 
-  console.log(`[Webhook] Status update: ${data.status}`, {
+  console.log(`[Webhook] Status update: ${data.status}${data.subStatus ? ` / ${data.subStatus}` : ""}`, {
     txId: data.id,
     asset: data.assetId,
     amountUSD: data.amountInfo.amountUSD,
     amountCrypto: data.amountInfo.amount,
     destAddress: data.destinationAddress,
+    vaultId: data.destination.id,
   });
 
   switch (data.status) {
@@ -198,7 +211,62 @@ console.log({data});
     case TRANSACTION_STATUS.BLOCKED:
       await handleFailed(data);
       break;
+    // ── Intermediate / in-progress statuses ──────────────────────────────────
+    case TRANSACTION_STATUS.SUBMITTED:
+    case TRANSACTION_STATUS.QUEUED:
+    case TRANSACTION_STATUS.PENDING_AML_SCREENING:
+    case TRANSACTION_STATUS.PENDING_ENRICHMENT:
+    case TRANSACTION_STATUS.PENDING_AUTHORIZATION:
+    case TRANSACTION_STATUS.PENDING_SIGNATURE:
+    case TRANSACTION_STATUS.PENDING_3RD_PARTY_MANUAL_APPROVAL:
+    case TRANSACTION_STATUS.PENDING_3RD_PARTY:
+    case TRANSACTION_STATUS.BROADCASTING:
+    case TRANSACTION_STATUS.CANCELLING:
+    case TRANSACTION_STATUS.SIGNED:
+      await handleIntermediateStatus(data);
+      break;
+    default:
+      console.log(`[Webhook] Unhandled Fireblocks status: ${data.status}`);
   }
+}
+
+// ─── Handle Intermediate / In-Progress Statuses ──────────────────────────────
+
+async function handleIntermediateStatus(data: WebhookPayload["data"]) {
+  const session = await findMatchingSession(data);
+  if (!session) {
+    console.warn(`[Webhook] INTERMEDIATE (${data.status}): No matching session found for tx ${data.id}`);
+    return;
+  }
+
+  // Map Fireblocks status → our session display status
+  const inProgressStatuses: Partial<Record<FireblocksTransactionStatus, string>> = {
+    SUBMITTED:                        "pending",
+    QUEUED:                           "pending",
+    PENDING_AML_SCREENING:            "pending",
+    PENDING_ENRICHMENT:               "pending",
+    PENDING_AUTHORIZATION:            "pending",
+    PENDING_SIGNATURE:                "pending",
+    PENDING_3RD_PARTY_MANUAL_APPROVAL: "pending",
+    PENDING_3RD_PARTY:                "pending",
+    BROADCASTING:                     "broadcasting",
+    CANCELLING:                       "cancelling",
+    SIGNED:                           "confirming",
+  };
+
+  const sessionStatus = inProgressStatuses[data.status as FireblocksTransactionStatus] ?? "pending";
+  const rawStatus = data.status as FireblocksTransactionStatus;
+
+  await prisma.paymentSession.update({
+    where: { id: session.id },
+    data: {
+      fireblocksStatus: rawStatus,
+      fireblocksTxId: data.id,
+      ...(sessionStatus !== session.status && { status: sessionStatus }),
+    },
+  });
+
+  console.log(`[Webhook] Session ${session.id}: fireblocksStatus → ${rawStatus} (status=${sessionStatus})`);
 }
 
 // ─── Find the matching PaymentSession ────────────────────────────────────────
@@ -254,7 +322,7 @@ async function findMatchingSession(data: WebhookPayload["data"]) {
   // 5. Try externalTxId (rare, but possible)
   if (data.externalTxId) {
     const session = await prisma.paymentSession.findFirst({
-      where: { externalTxId: data.externalTxId, status: { in: ["pending", "confirming"] } },
+      where: { externalTxId: data.externalTxId, status: { in: ["pending", "broadcasting", "cancelling", "confirming"] } },
     });
     if (session) {
       console.log(`[✓] Matched by externalTxId: ${session.tier} (${session.id})`);
@@ -277,7 +345,7 @@ async function handleCompleted(data: WebhookPayload["data"]) {
   if (!session) {
     // Unknown payment — log for manual review
     const detectedTier = getTierFromAmount(amountUsd);
-    console.warn(`[Webhook] No matching session for completed tx ${data.id}`);
+    console.warn(`[Webhook] COMPLETED: No matching session for tx ${data.id} (amount: $${amountUsd}, asset: ${data.assetId}, vault: ${data.destination.id})`);
 
     await prisma.platformActivity.create({
       data: {
@@ -360,6 +428,7 @@ async function handleCompleted(data: WebhookPayload["data"]) {
         where: { id: session.id },
         data: {
           status: "completed",
+          fireblocksStatus: "COMPLETED",
           fireblocksTxId: data.id,
           txHash: data.txHash,
           amountReceived: amountUsd,
@@ -467,13 +536,17 @@ async function handleCompleted(data: WebhookPayload["data"]) {
 
 async function handleConfirming(data: WebhookPayload["data"]) {
   const session = await findMatchingSession(data);
-  if (!session) return;
+  if (!session) {
+    console.warn(`[Webhook] CONFIRMING: No matching session found for tx ${data.id}`);
+    return;
+  }
 
   await prisma.$transaction([
     prisma.paymentSession.update({
       where: { id: session.id },
       data: {
         status: "confirming",
+        fireblocksStatus: "CONFIRMING",
         fireblocksTxId: data.id,
         txHash: data.txHash,
         amountReceived: parseFloat(data.amountInfo.amountUSD || "0"),
@@ -486,7 +559,7 @@ async function handleConfirming(data: WebhookPayload["data"]) {
     }),
   ]);
 
-  console.log(`[Webhook] Session ${session.id} status -> confirming`);
+  console.log(`[Webhook] Session ${session.id} status -> confirming (fireblocksStatus: CONFIRMING)`);
 }
 
 // ─── Handle FAILED/CANCELLED/REJECTED/BLOCKED ───────────────────────────────
@@ -516,13 +589,19 @@ async function handleFailed(data: WebhookPayload["data"]) {
     await prisma.$transaction([
       prisma.paymentSession.update({
         where: { id: session.id },
-        data: { status: "failed", fireblocksTxId: data.id },
+        data: {
+          status: "failed",
+          fireblocksStatus: data.status as FireblocksTransactionStatus,
+          fireblocksTxId: data.id,
+        },
       }),
       prisma.purchase.update({
         where: { id: session.purchaseId },
         data: { status: "failed" },
       }),
     ]);
-    console.log(`[Webhook] Session ${session.id} status -> failed (${data.status})`);
+    console.log(`[Webhook] Session ${session.id} status -> failed (fireblocksStatus: ${data.status})`);
+  } else {
+    console.warn(`[Webhook] FAILED: No matching session found for tx ${data.id}`);
   }
 }

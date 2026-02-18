@@ -467,6 +467,7 @@ export async function getPaymentSessionStatus(sessionId: string, userId: string)
     depositTag: session.depositTag,
     vaultAccountId: session.vaultAccountId,
     status: session.status,
+    fireblocksStatus: session.fireblocksStatus,
     fireblocksTxId: session.fireblocksTxId,
     txHash: session.txHash,
     amountReceived: session.amountReceived,
@@ -503,7 +504,7 @@ export async function findSessionByDepositAddress(depositAddress: string) {
   return prisma.paymentSession.findFirst({
     where: {
       depositAddress,
-      status: { in: ["pending", "confirming", "partial"] },
+      status: { in: ["pending", "broadcasting", "confirming", "partial"] },
     },
     orderBy: { createdAt: "desc" },
     include: { purchase: true, user: true },
@@ -518,7 +519,7 @@ export async function findAllPendingSessionsByVault(vaultAccountId: string) {
   return prisma.paymentSession.findMany({
     where: {
       vaultAccountId,
-      status: { in: ["pending", "confirming"] },
+      status: { in: ["pending", "broadcasting", "confirming"] },
     },
     orderBy: { createdAt: "desc" },
     include: { purchase: true, user: true },
@@ -534,7 +535,7 @@ export async function findSessionByVaultId(vaultAccountId: string) {
   return prisma.paymentSession.findFirst({
     where: {
       vaultAccountId,
-      status: { in: ["pending", "confirming", "partial"] },
+      status: { in: ["pending", "broadcasting", "confirming", "partial"] },
     },
     orderBy: { createdAt: "desc" },
     include: { purchase: true, user: true },

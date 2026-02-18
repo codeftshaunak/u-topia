@@ -263,6 +263,7 @@ model PaymentSession {
   customerRefId   String?         // Reference ID for Fireblocks transaction metadata
   provider        PaymentProvider @default(fireblocks)
   status          String          @default("pending")
+  fireblocksStatus String?         // Raw Fireblocks status code (e.g. CONFIRMING, COMPLETED, FAILED)
   fireblocksTxId  String?
   txHash          String?
   amountReceived  Float?
