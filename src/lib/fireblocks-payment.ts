@@ -67,11 +67,11 @@ export interface PaymentSessionResult {
 // --- Tier & Asset Configuration ---
 
 export const TIER_PACKAGES: Record<string, { name: string; price: number; shares: number }> = {
-  bronze:   { name: "Bronze Membership",   price: 100,  shares: 100  },
-  silver:   { name: "Silver Membership",   price: 250,  shares: 250  },
-  gold:     { name: "Gold Membership",     price: 500,  shares: 500  },
-  platinum: { name: "Platinum Membership", price: 1000, shares: 1000 },
-  diamond:  { name: "Diamond Membership",  price: 2500, shares: 2500 },
+  bronze:   { name: "Bronze Membership",   price: 1,  shares: 100  },
+  silver:   { name: "Silver Membership",   price: 2,  shares: 250  },
+  gold:     { name: "Gold Membership",     price: 3,  shares: 500  },
+  platinum: { name: "Platinum Membership", price: 4, shares: 1000 },
+  diamond:  { name: "Diamond Membership",  price: 5, shares: 2500 },
 };
 
 /**

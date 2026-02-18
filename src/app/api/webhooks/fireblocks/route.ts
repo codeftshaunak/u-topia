@@ -175,7 +175,7 @@ async function handleTransactionCreated(payload: WebhookPayload) {
 
 async function handleTransactionStatusUpdated(payload: WebhookPayload) {
   const { data } = payload;
-
+console.log({data});
   if (data.destination.type !== ACCOUNT_TYPES.VAULT_ACCOUNT) return;
 
   console.log(`[Webhook] Status update: ${data.status}`, {

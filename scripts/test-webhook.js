@@ -1,12 +1,12 @@
 /**
  * Test script for Fireblocks webhook endpoint
- * 
+ *
  * Tests:
  * 1. Webhook signature verification
  * 2. Transaction created event processing
  * 3. Transaction status update event processing
  * 4. Payment matching logic
- * 
+ *
  * Usage: node scripts/test-webhook.js
  */
 
@@ -34,7 +34,7 @@ const TRANSACTION_CREATED_PAYLOAD = {
     operation: "TRANSFER",
     assetId: "BTC_TEST",
     source: { type: "EXTERNAL_WALLET" },
-    destination: { 
+    destination: {
       type: "VAULT_ACCOUNT",
       id: "test-vault-123",
       name: "User Vault"
@@ -78,20 +78,20 @@ const TRANSACTION_STATUS_UPDATED_PAYLOAD = {
 async function testWebhook() {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   const webhookUrl = `${baseUrl}/api/webhooks/fireblocks`;
-  
+
   console.log('🔍 Testing Fireblocks Webhook');
   console.log('📍 Endpoint:', webhookUrl);
   console.log();
 
   // Test 1: Transaction Created
   await testEvent('TRANSACTION_CREATED', TRANSACTION_CREATED_PAYLOAD, webhookUrl);
-  
+
   // Test 2: Transaction Status Updated (COMPLETED)
   await testEvent('TRANSACTION_STATUS_UPDATED - COMPLETED', TRANSACTION_STATUS_UPDATED_PAYLOAD, webhookUrl);
-  
+
   // Test 3: Invalid signature
   await testInvalidSignature(webhookUrl);
-  
+
   // Test 4: Missing signature
   await testMissingSignature(webhookUrl);
 
@@ -101,13 +101,13 @@ async function testWebhook() {
 async function testEvent(name, payload, webhookUrl) {
   console.log(`\n📤 Testing: ${name}`);
   console.log('━'.repeat(60));
-  
+
   const body = JSON.stringify(payload);
-  
+
   // In development, signature verification is bypassed
   // For production testing, you would need the actual private key
   const fakeSignature = Buffer.from('test-signature').toString('base64');
-  
+
   try {
     const response = await fetch(webhookUrl, {
       method: 'POST',
@@ -119,10 +119,10 @@ async function testEvent(name, payload, webhookUrl) {
     });
 
     const result = await response.json();
-    
+
     console.log(`Status: ${response.status} ${response.statusText}`);
     console.log('Response:', JSON.stringify(result, null, 2));
-    
+
     if (response.status === 200) {
       console.log('✅ Webhook processed successfully');
     } else {
@@ -136,11 +136,11 @@ async function testEvent(name, payload, webhookUrl) {
 async function testInvalidSignature(webhookUrl) {
   console.log('\n📤 Testing: Invalid Signature');
   console.log('━'.repeat(60));
-  
+
   const payload = TRANSACTION_CREATED_PAYLOAD;
   const body = JSON.stringify(payload);
   const invalidSignature = 'invalid-signature';
-  
+
   try {
     const response = await fetch(webhookUrl, {
       method: 'POST',
@@ -152,10 +152,10 @@ async function testInvalidSignature(webhookUrl) {
     });
 
     const result = await response.json();
-    
+
     console.log(`Status: ${response.status} ${response.statusText}`);
     console.log('Response:', JSON.stringify(result, null, 2));
-    
+
     if (response.status === 401 || response.status === 200) {
       console.log('✅ Invalid signature handled correctly');
     } else {
@@ -169,10 +169,10 @@ async function testInvalidSignature(webhookUrl) {
 async function testMissingSignature(webhookUrl) {
   console.log('\n📤 Testing: Missing Signature');
   console.log('━'.repeat(60));
-  
+
   const payload = TRANSACTION_CREATED_PAYLOAD;
   const body = JSON.stringify(payload);
-  
+
   try {
     const response = await fetch(webhookUrl, {
       method: 'POST',
@@ -183,10 +183,10 @@ async function testMissingSignature(webhookUrl) {
     });
 
     const result = await response.json();
-    
+
     console.log(`Status: ${response.status} ${response.statusText}`);
     console.log('Response:', JSON.stringify(result, null, 2));
-    
+
     if (response.status === 400) {
       console.log('✅ Missing signature rejected correctly');
     } else {

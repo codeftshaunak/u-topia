@@ -321,7 +321,7 @@ const Payment = () => {
       platinum: "Platinum", diamond: "Diamond",
     };
     const tierPrices: Record<string, number> = {
-      bronze: 100, silver: 250, gold: 500, platinum: 1000, diamond: 2500,
+      bronze: 1, silver: 2, gold: 3, platinum: 4, diamond: 5,
     };
 
     return (
