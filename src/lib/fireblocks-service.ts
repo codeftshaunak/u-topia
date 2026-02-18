@@ -178,72 +178,59 @@ export function isPermissionError(err: unknown): boolean {
 // --- Address Operations ---
 
 /**
- * Get the deposit address for a vault asset.
+ * Generate a fresh unique deposit address for a vault asset.
  *
- * Strategy:
- * 1. Call createVaultAccountAsset (activation).
- *    - On FIRST activation → Fireblocks returns the address directly in the
- *      response. This is the ONLY reliable way to get the address for EVM
- *      chains (ETH, USDT, etc.) on Fireblocks sandbox.
- *    - On subsequent calls → "already exists" error; fall through to step 2.
- * 2. Read from getVaultAccountAssetAddressesPaginated (with retry/backoff)
- *    for assets that were activated previously.
+ * Since only BTC (UTXO) is supported, every call creates a brand-new address
+ * via createVaultAccountAssetAddress — each payment session gets its own
+ * unique address, making it unambiguous which package a payment belongs to.
+ *
+ * Flow:
+ * 1. Activate the asset (idempotent). On first activation the address is
+ *    returned directly in the response — use it immediately.
+ * 2. For subsequent calls (asset already active), call
+ *    createVaultAccountAssetAddress to get a fresh unique address.
  */
 export async function generateDepositAddress(
   vaultId: string,
-  assetId: string,
-  maxRetries = 5,
-  delayMs = 2000
+  assetId: string
 ): Promise<DepositAddress> {
   const fireblocks = getFireblocksClient();
 
-  // Step 1: activate — may return address directly on first activation
+  // Step 1: activate — returns address on first activation
   const activation = await activateAssetInVault(vaultId, assetId);
   if (activation.address) {
-    console.log(`Deposit address for ${assetId} in vault ${vaultId} (from activation): ${activation.address}`);
+    console.log(`New deposit address for ${assetId} in vault ${vaultId} (from activation): ${activation.address}`);
     return {
       assetId,
       address: activation.address,
-      tag: activation.tag,
-      legacyAddress: activation.legacyAddress,
+      tag: activation.tag || undefined,
+      legacyAddress: activation.legacyAddress || undefined,
     };
   }
 
-  // Step 2: asset was already active — fetch existing address with retry/backoff
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const resp = await fireblocks.vaults.getVaultAccountAssetAddressesPaginated({
-        vaultAccountId: vaultId,
-        assetId: assetId,
-      });
-
-      const addr = resp.data?.addresses?.[0];
-      if (addr?.address) {
-        console.log(`Deposit address for ${assetId} in vault ${vaultId}: ${addr.address} (attempt ${attempt})`);
-        return {
-          assetId,
-          address: addr.address,
-          tag: addr.tag,
-          legacyAddress: addr.legacyAddress,
-        };
-      }
-
-      console.log(`No address yet for ${assetId} in vault ${vaultId} (attempt ${attempt}/${maxRetries}), retrying in ${delayMs}ms...`);
-    } catch (err: unknown) {
-      console.warn(`Error fetching address for ${assetId} (attempt ${attempt}): ${extractErrorMessage(err)}`);
+  // Step 2: asset already active — create a new unique address (UTXO only)
+  try {
+    const resp = await fireblocks.vaults.createVaultAccountAssetAddress({
+      vaultAccountId: vaultId,
+      assetId: assetId,
+    });
+    const address = resp.data?.address;
+    if (address) {
+      console.log(`New deposit address for ${assetId} in vault ${vaultId}: ${address}`);
+      return {
+        assetId,
+        address,
+        tag: resp.data?.tag || undefined,
+        legacyAddress: resp.data?.legacyAddress || undefined,
+      };
     }
-
-    if (attempt < maxRetries) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-      delayMs = Math.min(delayMs * 1.5, 8000);
-    }
+  } catch (err: unknown) {
+    throw new Error(
+      `Failed to create deposit address for ${assetId} in vault ${vaultId}: ${extractErrorMessage(err)}`
+    );
   }
 
-  throw new Error(
-    `No deposit address found for ${assetId} in vault ${vaultId}. ` +
-    `The vault may be in a broken state (assets activated without addresses). ` +
-    `Clear the user's fireblocksVaultId in the database to force a new vault.`
-  );
+  throw new Error(`No address returned for ${assetId} in vault ${vaultId}.`);
 }
 
 

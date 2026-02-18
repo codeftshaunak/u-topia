@@ -78,20 +78,22 @@ export const TIER_PACKAGES: Record<string, { name: string; price: number; shares
 /**
  * Asset Configuration
  *
- * These constants define which crypto assets are supported for payments
- * in different environments (sandbox/testnet vs production/mainnet).
+ * ONLY Bitcoin is supported for payments.
+ *
+ * Reason: BTC is a UTXO chain — each payment session gets a UNIQUE deposit
+ * address via createVaultAccountAssetAddress. This makes it trivially easy
+ * to identify exactly which package a received payment belongs to.
+ *
+ * EVM/account-based chains (ETH, USDT, SOL) reuse a single vault address,
+ * so two simultaneous pending sessions would share the same address and
+ * create an irresolvable conflict.
  */
 export const MAINNET_ASSETS = [
-  { id: "BTC",        name: "Bitcoin",          symbol: "BTC"  },
-  { id: "ETH",        name: "Ethereum",         symbol: "ETH"  },
-  { id: "USDT_ERC20", name: "Tether (ERC-20)",  symbol: "USDT" },
-  { id: "USDC",       name: "USD Coin",         symbol: "USDC" },
-  { id: "SOL",        name: "Solana",           symbol: "SOL"  },
+  { id: "BTC", name: "Bitcoin", symbol: "BTC" },
 ];
 
 export const TESTNET_ASSETS = [
-  { id: "BTC_TEST",  name: "Bitcoin Testnet",  symbol: "BTC" },
-  { id: "ETH_TEST5", name: "Ethereum Sepolia", symbol: "ETH" },
+  { id: "BTC_TEST", name: "Bitcoin Testnet", symbol: "BTC" },
 ];
 
 function getSupportedAssets() {
@@ -135,57 +137,16 @@ export async function getOrCreateUserVault(userId: string): Promise<string> {
     throw new Error(`User not found: ${userId}`);
   }
 
-  // 2. If vault exists in DB, verify and return it
+  // 2. If vault exists in DB, verify it still exists in Fireblocks and return it.
+  //    For BTC (UTXO), each session generates a fresh address on demand via
+  //    createVaultAccountAssetAddress — no need to validate existing addresses.
   if (user.fireblocksVaultId) {
     const exists = await vaultExists(user.fireblocksVaultId);
     if (exists) {
-      // Sanity-check: verify the vault has at least one asset with an address.
-      // A vault can be in a broken state where assets were listed but addresses
-      // were never generated (e.g. activation failed silently on first try).
-      // If broken, fall through and create a fresh vault.
-      const assetIds = SUPPORTED_ASSETS.map(a => a.id);
-      let vaultHealthy = false;
-      for (const assetId of assetIds) {
-        const result = await activateAssetInVault(user.fireblocksVaultId, assetId);
-        if (result.address) {
-          // Fresh activation returned an address — vault is healthy again
-          vaultHealthy = true;
-          break;
-        }
-        // "already exists" — check paginated addresses
-        const { getFireblocksClient } = await import("./fireblocks");
-        const fb = getFireblocksClient();
-        try {
-          const resp = await fb.vaults.getVaultAccountAssetAddressesPaginated({
-            vaultAccountId: user.fireblocksVaultId,
-            assetId,
-          });
-          if (resp.data?.addresses?.[0]?.address) {
-            vaultHealthy = true;
-            break;
-          }
-        } catch {
-          // ignore
-        }
-      }
-
-      if (vaultHealthy) {
-        console.log(`Using existing Fireblocks vault ${user.fireblocksVaultId} for user ${userId}`);
-        return user.fireblocksVaultId;
-      }
-
-      console.warn(
-        `Vault ${user.fireblocksVaultId} is broken (assets activated but no addresses). ` +
-        `Creating a new vault for user ${userId}.`
-      );
-      // Clear the broken vault so we fall through to create a fresh one
-      await prisma.user.update({
-        where: { id: userId },
-        data: { fireblocksVaultId: null },
-      });
-    } else {
-      console.warn(`Stored vault ${user.fireblocksVaultId} not found in Fireblocks. Creating new vault.`);
+      console.log(`Using existing Fireblocks vault ${user.fireblocksVaultId} for user ${userId}`);
+      return user.fireblocksVaultId;
     }
+    console.warn(`Stored vault ${user.fireblocksVaultId} not found in Fireblocks. Creating new vault.`);
   }
 
   // 3. Create new Fireblocks vault for this user
