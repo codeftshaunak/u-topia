@@ -54,6 +54,8 @@ export async function POST(request: NextRequest) {
       tier: paymentSession.tier,
       tierName: pkg.name,
       priceUsd: paymentSession.priceUsd,
+      amountCrypto: paymentSession.amountCrypto,
+      btcRateUsd: paymentSession.btcRateUsd,
       assetId: paymentSession.assetId,
       assetName: paymentSession.assetName,
       depositAddress: paymentSession.depositAddress,
@@ -63,12 +65,12 @@ export async function POST(request: NextRequest) {
       instructions: {
         title: "Complete Your Payment",
         steps: [
-          `Send exactly $${pkg.price} USD worth of ${asset.name} to the address below`,
+          `Send exactly ${paymentSession.amountCrypto} BTC (≈ $${pkg.price} USD) to the address below`,
           "Copy the deposit address or scan the QR code",
-          "Wait for blockchain confirmation (usually 10-30 minutes)",
+          "Wait for blockchain confirmation (usually 10–30 minutes for BTC)",
           "Your membership will activate automatically",
         ],
-        note: "Each payment address is unique to your session. Do not reuse old addresses.",
+        note: `Rate: 1 BTC = $${paymentSession.btcRateUsd.toLocaleString()} USD. Each address is unique to your session.`,
       },
     });
   } catch (error) {

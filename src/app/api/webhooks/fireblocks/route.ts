@@ -25,7 +25,6 @@ import {
   findSessionByVaultAndAmount,
   isUTXOChain,
   isAccountBasedChain,
-  isPaymentSufficient,
   getTierFromAmount,
   getTierDepth,
   TIER_PACKAGES,
@@ -182,6 +181,7 @@ console.log({data});
     txId: data.id,
     asset: data.assetId,
     amountUSD: data.amountInfo.amountUSD,
+    amountCrypto: data.amountInfo.amount,
     destAddress: data.destinationAddress,
   });
 
@@ -223,24 +223,14 @@ async function findMatchingSession(data: WebhookPayload["data"]) {
 
   console.log(`[Payment Matching] Asset: ${assetId}, Amount: $${amountUsd}, Vault: ${vaultId}`);
 
-  // 1. Try matching by customerRefId (most reliable)
-  if (data.customerRefId) {
-    const session = await prisma.paymentSession.findFirst({
-      where: { customerRefId: data.customerRefId, status: { in: ["pending", "confirming"] } },
-    });
-    if (session) {
-      console.log(`[✓] Matched by customerRefId: ${session.tier} (${session.id})`);
-      return session;
-    }
-  }
-
-  // 2. For UTXO chains: Match by unique deposit address
+  // 1. For UTXO chains: Match by unique deposit address (includes partial sessions)
   if (isUTXOChain(assetId) && depositAddress) {
     const session = await findSessionByDepositAddress(depositAddress);
     if (session) {
-      console.log(`[✓] UTXO Match by address: ${session.tier} (${session.id})`);
+      console.log(`[✓] UTXO Match by address: ${session.tier} (${session.id}) status=${session.status}`);
       return session;
     }
+    console.warn(`[Payment Matching] No session found for address: ${depositAddress}`);
   }
 
   // 3. For Account-based chains: Match by vault + amount
@@ -314,9 +304,16 @@ async function handleCompleted(data: WebhookPayload["data"]) {
     return;
   }
 
-  // Check if amount is sufficient (2% tolerance for price fluctuations)
-  if (!isPaymentSufficient(amountUsd, pkg.price)) {
-    console.warn(`[Webhook] Insufficient: received $${amountUsd}, expected $${pkg.price}`);
+  // Validate received crypto amount against session's stored amountCrypto.
+  // Accept if received >= stored (same amount or overpayment both pass).
+  // USD is NOT checked — BTC/USD rate fluctuates and is unreliable for validation.
+  const sessionAmountCrypto = parseFloat(session.amountCrypto || "0");
+  console.log(`[Webhook] Crypto check — received: ${amountCrypto} BTC, session requires: ${sessionAmountCrypto} BTC, pass: ${amountCrypto >= sessionAmountCrypto}`);
+  if (sessionAmountCrypto > 0 && amountCrypto < sessionAmountCrypto) {
+    console.warn(
+      `[Webhook] Insufficient crypto: received ${amountCrypto} BTC, ` +
+      `session requires ${sessionAmountCrypto} BTC (session ${session.id})`
+    );
 
     await prisma.$transaction([
       prisma.paymentSession.update({
@@ -343,8 +340,8 @@ async function handleCompleted(data: WebhookPayload["data"]) {
           metadata: {
             sessionId: session.id,
             transactionId: data.id,
-            expectedAmount: pkg.price,
-            receivedAmount: amountUsd,
+            expectedCrypto: sessionAmountCrypto,
+            receivedCrypto: amountCrypto,
             purchaseId: session.purchaseId,
           },
         },
@@ -352,6 +349,8 @@ async function handleCompleted(data: WebhookPayload["data"]) {
     ]);
     return;
   }
+
+  // Crypto amount is sufficient (received >= required) — complete the purchase!
 
   // Payment is sufficient — complete the purchase!
   try {

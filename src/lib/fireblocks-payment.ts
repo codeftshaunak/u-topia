@@ -56,6 +56,10 @@ export interface PaymentSessionResult {
   email: string;
   tier: string;
   priceUsd: number;
+  /** Exact BTC amount the user must send (priceUsd / btcRate), stored in DB */
+  amountCrypto: number;
+  /** Live BTC/USD rate used to compute amountCrypto */
+  btcRateUsd: number;
   assetId: string;
   assetName: string;
   depositAddress: string;
@@ -66,6 +70,43 @@ export interface PaymentSessionResult {
 }
 
 // --- Tier & Asset Configuration ---
+
+// --- Live BTC/USD Rate ---
+
+/**
+ * Fetch the live BTC/USD spot rate.
+ * Primary source: CoinGecko (free, no key required).
+ * Fallback: conservative static rate so payments never fail.
+ */
+export async function getBtcRateUsd(): Promise<number> {
+  const FALLBACK_RATE = 80000; // conservative fallback — updated periodically
+
+  try {
+    const isSandbox = process.env.FIREBLOCKS_BASE_PATH === "sandbox";
+    // Use BTC_TEST (testnet) or BTC (mainnet) id for CoinGecko
+    const coinId = isSandbox ? "bitcoin" : "bitcoin";
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`,
+      { next: { revalidate: 60 } } // cache 60s on Next.js
+    );
+    if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
+    const json = await res.json();
+    const rate = json?.bitcoin?.usd;
+    if (typeof rate !== "number" || rate <= 0) throw new Error("Invalid rate");
+    console.log(`[BTC Rate] Live rate: $${rate.toLocaleString()}/BTC`);
+    return rate;
+  } catch (err) {
+    console.warn(`[BTC Rate] Failed to fetch live rate, using fallback $${FALLBACK_RATE}:`, err);
+    return FALLBACK_RATE;
+  }
+}
+
+/**
+ * Convert a USD amount to BTC, rounded to 8 decimal places (satoshi precision).
+ */
+export function usdToBtc(usd: number, btcRateUsd: number): number {
+  return parseFloat((usd / btcRateUsd).toFixed(8));
+}
 
 export const TIER_PACKAGES: Record<string, { name: string; price: number; shares: number }> = {
   bronze:   { name: "Bronze Membership",   price: 1,  shares: 100  },
@@ -299,6 +340,12 @@ export async function createPaymentSession(
 
   if (existingSession) {
     console.log(`Reusing existing payment session ${existingSession.id}`);
+    // Re-fetch live rate so the UI always shows a fresh BTC amount
+    const btcRateUsd = await getBtcRateUsd();
+    const storedCrypto = parseFloat(existingSession.amountCrypto || "0");
+    const amountCrypto = storedCrypto > 0
+      ? storedCrypto
+      : usdToBtc(existingSession.amountUsd, btcRateUsd);
     return {
       sessionId: existingSession.id,
       purchaseId: existingSession.purchaseId,
@@ -307,6 +354,8 @@ export async function createPaymentSession(
       email: existingSession.email,
       tier: existingSession.tier,
       priceUsd: existingSession.amountUsd,
+      amountCrypto,
+      btcRateUsd,
       assetId: existingSession.assetId,
       assetName: asset.name,
       depositAddress: existingSession.depositAddress,
@@ -317,7 +366,12 @@ export async function createPaymentSession(
     };
   }
 
-  // 3. Generate unique deposit address
+  // 3. Fetch live BTC/USD rate and compute exact crypto amount
+  const btcRateUsd = await getBtcRateUsd();
+  const amountCrypto = usdToBtc(pkg.price, btcRateUsd);
+  console.log(`[Session] $${pkg.price} USD = ${amountCrypto} BTC @ $${btcRateUsd}/BTC`);
+
+  // 4. Generate unique deposit address
   const deposit = await getDepositAddress(vaultAccountId, assetId);
 
   // 4. Generate unique externalTxId for Fireblocks idempotency
@@ -327,7 +381,7 @@ export async function createPaymentSession(
   // Format: package:tier:userId:timestamp
   const customerRefId = `pkg:${tier}:${userId}:${Date.now()}`;
 
-  // 5. Create Purchase + PaymentSession atomically
+  // 6. Create Purchase + PaymentSession atomically
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
 
@@ -352,6 +406,7 @@ export async function createPaymentSession(
         email,
         tier: tier.toLowerCase(),
         amountUsd: pkg.price,
+        amountCrypto: amountCrypto.toString(), // exact BTC required
         assetId,
         depositAddress: deposit.address,
         depositTag: deposit.tag,
@@ -367,7 +422,7 @@ export async function createPaymentSession(
     return { purchase, session };
   });
 
-  console.log(`Payment session created: ${result.session.id} | Address: ${deposit.address} | Asset: ${assetId}`);
+  console.log(`Payment session created: ${result.session.id} | Address: ${deposit.address} | ${amountCrypto} BTC ($${pkg.price})`);
 
   return {
     sessionId: result.session.id,
@@ -377,6 +432,8 @@ export async function createPaymentSession(
     email,
     tier: tier.toLowerCase(),
     priceUsd: pkg.price,
+    amountCrypto,
+    btcRateUsd,
     assetId,
     assetName: asset.name,
     depositAddress: deposit.address,
@@ -446,7 +503,7 @@ export async function findSessionByDepositAddress(depositAddress: string) {
   return prisma.paymentSession.findFirst({
     where: {
       depositAddress,
-      status: { in: ["pending", "confirming"] },
+      status: { in: ["pending", "confirming", "partial"] },
     },
     orderBy: { createdAt: "desc" },
     include: { purchase: true, user: true },
@@ -477,7 +534,7 @@ export async function findSessionByVaultId(vaultAccountId: string) {
   return prisma.paymentSession.findFirst({
     where: {
       vaultAccountId,
-      status: { in: ["pending", "confirming"] },
+      status: { in: ["pending", "confirming", "partial"] },
     },
     orderBy: { createdAt: "desc" },
     include: { purchase: true, user: true },

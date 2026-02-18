@@ -134,7 +134,7 @@ const Purchase = () => {
             </h1>
 
             <p className="text-5xl md:text-6xl font-bold text-primary mb-8">
-              {formatPrice(currentPackage.price_usd)}
+              {formatPrice(currentPackage.priceUsd)}
             </p>
 
             <Button
@@ -233,7 +233,7 @@ const Purchase = () => {
                       {pkg.name}
                     </h3>
                     <p className="text-xl font-bold text-primary">
-                      {formatPrice(pkg.price_usd)}
+                      {formatPrice(pkg.priceUsd)}
                     </p>
                   </div>
                 </div>

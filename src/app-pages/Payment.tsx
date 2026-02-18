@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Header from "@/components/Header";
 import { useToast } from "@/hooks/use-toast";
+import { usePackages } from "@/hooks/usePackages";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Loader2,
@@ -40,6 +41,9 @@ interface PaymentData {
   tier: string;
   tierName: string;
   priceUsd: number;
+  /** Exact BTC to send: priceUsd / btcRateUsd */
+  amountCrypto: number;
+  btcRateUsd: number;
   assetId: string;
   assetName: string;
   depositAddress: string;
@@ -79,6 +83,7 @@ const Payment = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { packages } = usePackages();
 
   // State
   const [step, setStep] = useState<"select-asset" | "pay">("select-asset");
@@ -163,6 +168,8 @@ const Payment = () => {
         tier: data.tier,
         tierName: data.tierName,
         priceUsd: data.priceUsd,
+        amountCrypto: data.amountCrypto ?? 0,
+        btcRateUsd: data.btcRateUsd ?? 0,
         assetId: data.assetId,
         assetName: data.assetName,
         depositAddress: data.depositAddress,
@@ -212,6 +219,8 @@ const Payment = () => {
         tier: data.tier,
         tierName: data.tierName,
         priceUsd: data.priceUsd,
+        amountCrypto: data.amountCrypto ?? 0,
+        btcRateUsd: data.btcRateUsd ?? 0,
         assetId: data.assetId,
         assetName: data.assetName,
         depositAddress: data.depositAddress,
@@ -320,10 +329,8 @@ const Payment = () => {
       bronze: "Bronze", silver: "Silver", gold: "Gold",
       platinum: "Platinum", diamond: "Diamond",
     };
-    const tierPrices: Record<string, number> = {
-      bronze: 1, silver: 2, gold: 3, platinum: 4, diamond: 5,
-    };
-
+    const tierPkg = packages.find(p => p.name.toLowerCase() === tier);
+    const tierPrice = tierPkg?.priceUsd ?? "?";
     return (
       <div className="min-h-screen bg-background">
         <Header />
@@ -340,7 +347,7 @@ const Payment = () => {
                 )}
               </div>
               <CardTitle className="text-2xl">
-                {tierNames[tier] || tier} Package — ${tierPrices[tier] || "?"} USD
+                {tierNames[tier] || tier} Package — ${tierPrice} USD
               </CardTitle>
               <p className="text-muted-foreground mt-2">
                 Select how you want to pay
@@ -537,9 +544,15 @@ const Payment = () => {
                   {/* Amount reminder */}
                   <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-center">
                     <p className="text-sm text-muted-foreground">Amount to send</p>
-                    <p className="text-2xl font-bold text-primary">${paymentData.priceUsd} USD</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      in {paymentData.assetName} ({paymentData.assetId})
+                    <p className="text-3xl font-bold text-primary font-mono tracking-tight">
+                      {paymentData.amountCrypto.toFixed(8)}
+                      <span className="text-lg ml-1">{paymentData.assetId === "BTC_TEST" ? "tBTC" : "BTC"}</span>
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      ≈ <span className="font-semibold">${paymentData.priceUsd}</span> USD
+                    </p>
+                    <p className="text-xs text-muted-foreground/70 mt-1">
+                      Rate: 1 BTC = ${paymentData.btcRateUsd.toLocaleString()} USD
                     </p>
                   </div>
 
@@ -577,6 +590,11 @@ const Payment = () => {
                   <div>
                     <p className="font-semibold text-lg">{paymentData?.tierName}</p>
                     <p className="text-2xl font-bold text-primary">${paymentData?.priceUsd} USD</p>
+                    {paymentData?.amountCrypto > 0 && (
+                      <p className="text-sm font-mono text-muted-foreground mt-0.5">
+                        {paymentData.amountCrypto.toFixed(8)} {paymentData.assetId === "BTC_TEST" ? "tBTC" : "BTC"}
+                      </p>
+                    )}
                   </div>
                 </div>
 

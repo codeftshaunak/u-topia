@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/auth";
-import { getPaymentSessionStatus, TIER_PACKAGES, SUPPORTED_ASSETS } from "@/lib/fireblocks-payment";
+import { getPaymentSessionStatus, TIER_PACKAGES, SUPPORTED_ASSETS, getBtcRateUsd, usdToBtc } from "@/lib/fireblocks-payment";
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,12 +31,21 @@ export async function GET(request: NextRequest) {
     const pkg = TIER_PACKAGES[paymentSession.tier];
     const asset = SUPPORTED_ASSETS.find((a) => a.id === paymentSession.assetId);
 
+    // Determine amountCrypto: use stored value or re-compute from live rate
+    const storedCrypto = parseFloat(paymentSession.amountCrypto || "0");
+    const btcRateUsd = await getBtcRateUsd();
+    const amountCrypto = storedCrypto > 0
+      ? storedCrypto
+      : usdToBtc(paymentSession.amountUsd, btcRateUsd);
+
     return NextResponse.json({
       sessionId: paymentSession.sessionId,
       purchaseId: paymentSession.purchaseId,
       tier: paymentSession.tier,
       tierName: pkg?.name || paymentSession.tier,
       priceUsd: paymentSession.amountUsd,
+      amountCrypto,
+      btcRateUsd,
       assetId: paymentSession.assetId,
       assetName: asset?.name || paymentSession.assetId,
       depositAddress: paymentSession.depositAddress,
@@ -51,12 +60,12 @@ export async function GET(request: NextRequest) {
       instructions: {
         title: "Complete Your Payment",
         steps: [
-          `Send exactly $${pkg?.price || paymentSession.amountUsd} USD worth of ${asset?.name || paymentSession.assetId} to the address below`,
+          `Send exactly ${amountCrypto.toFixed(8)} BTC (≈ $${pkg?.price || paymentSession.amountUsd} USD) to the address below`,
           "Copy the deposit address or scan the QR code",
-          "Wait for blockchain confirmation (usually 10-30 minutes)",
+          "Wait for blockchain confirmation (usually 10–30 minutes for BTC)",
           "Your membership will activate automatically",
         ],
-        note: "Each payment address is unique to your session. Do not reuse old addresses.",
+        note: `Rate: 1 BTC = $${btcRateUsd.toLocaleString()} USD. Each address is unique to your session.`,
       },
     });
   } catch (error) {
