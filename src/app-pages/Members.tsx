@@ -91,6 +91,9 @@ const members = [
 ];
 
 export default function Members() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { referralLink } = useReferralLink();
   const { toast } = useToast();
 
   return (
@@ -104,9 +107,9 @@ export default function Members() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Total Earnings Card */}
         <div className="relative overflow-hidden rounded-xl h-40 group">
-          <img 
-            src={cardEarnings} 
-            alt="Earnings background" 
+          <img
+            src={cardEarnings}
+            alt="Earnings background"
             className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/30" />
@@ -128,9 +131,9 @@ export default function Members() {
 
         {/* Available to Withdraw Card */}
         <div className="relative overflow-hidden rounded-xl h-40 group">
-          <img 
-            src={cardPending} 
-            alt="Withdraw background" 
+          <img
+            src={cardPending}
+            alt="Withdraw background"
             className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/30" />
@@ -141,8 +144,8 @@ export default function Members() {
             </div>
             <div>
               <div className="text-3xl font-bold text-white">$1,250</div>
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 className="mt-2 bg-orange-500 hover:bg-orange-600 text-white"
                 onClick={() => {
                   toast({
@@ -166,18 +169,21 @@ export default function Members() {
             </div>
             <div>
               <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-lg px-3 py-2 font-mono text-lg font-bold tracking-widest text-center mb-2">
-                UTOPIA-2847X
+                {referralLink || "Loading..."}
               </div>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 className="w-full"
+                disabled={!referralLink}
                 onClick={() => {
-                  navigator.clipboard.writeText("UTOPIA-2847X");
-                  toast({
-                    title: "Copied!",
-                    description: "Referral code copied to clipboard.",
-                  });
+                  if (referralLink) {
+                    navigator.clipboard.writeText(referralLink);
+                    toast({
+                      title: "Copied!",
+                      description: "Referral code copied to clipboard.",
+                    });
+                  }
                 }}
               >
                 Copy Code
@@ -220,7 +226,7 @@ export default function Members() {
                     </AvatarFallback>
                   </Avatar>
                   <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background ${
-                    member.status === 'online' ? 'bg-green-500' : 
+                    member.status === 'online' ? 'bg-green-500' :
                     member.status === 'away' ? 'bg-yellow-500' : 'bg-gray-400'
                   }`} />
                 </div>

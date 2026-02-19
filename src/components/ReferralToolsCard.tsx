@@ -11,6 +11,7 @@ import {
   RefreshCw,
   CheckCircle,
   Loader2,
+  ShoppingBag,
 } from "lucide-react";
 
 export function ReferralToolsCard() {
@@ -19,23 +20,35 @@ export function ReferralToolsCard() {
   const {
     referralLink,
     fullReferralUrl,
+    fullPurchaseReferralUrl,
     isLoading,
     isRefreshing,
     regenerateLink,
   } = useReferralLink();
   const [copied, setCopied] = useState(false);
+  const [copiedPurchase, setCopiedPurchase] = useState(false);
+  const [linkMode, setLinkMode] = useState<"signup" | "purchase">("purchase");
+
+  const activeUrl = linkMode === "purchase" ? fullPurchaseReferralUrl : fullReferralUrl;
 
   const handleCopyLink = async () => {
-    if (!fullReferralUrl) return;
+    if (!activeUrl) return;
 
     try {
-      await navigator.clipboard.writeText(fullReferralUrl);
-      setCopied(true);
+      await navigator.clipboard.writeText(activeUrl);
+      if (linkMode === "purchase") {
+        setCopiedPurchase(true);
+        setTimeout(() => setCopiedPurchase(false), 2000);
+      } else {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
       toast({
         title: "Link Copied",
-        description: "Referral link copied to clipboard.",
+        description: linkMode === "purchase"
+          ? "Package referral link copied to clipboard."
+          : "Referral link copied to clipboard.",
       });
-      setTimeout(() => setCopied(false), 2000);
     } catch {
       toast({
         title: "Copy Failed",
@@ -46,11 +59,11 @@ export function ReferralToolsCard() {
   };
 
   const handleShare = (platform: string) => {
-    if (!fullReferralUrl) return;
+    if (!activeUrl) return;
 
-    const message = encodeURIComponent(
-      "Join U-topia using my referral link: " + fullReferralUrl,
-    );
+    const message = linkMode === "purchase"
+      ? encodeURIComponent("Check out this U-topia package! Purchase using my referral link: " + activeUrl)
+      : encodeURIComponent("Join U-topia using my referral link: " + activeUrl);
     let url = "";
 
     switch (platform) {
@@ -117,30 +130,62 @@ export function ReferralToolsCard() {
         </div>
       </div>
 
+      {/* Link Mode Toggle */}
+      <div className="flex gap-2 mb-6">
+        <button
+          onClick={() => setLinkMode("purchase")}
+          className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+            linkMode === "purchase"
+              ? "bg-primary text-white shadow-md"
+              : "bg-secondary/50 text-muted-foreground border border-border hover:bg-secondary"
+          }`}
+        >
+          <ShoppingBag className="w-4 h-4" />
+          Package Referral
+        </button>
+        <button
+          onClick={() => setLinkMode("signup")}
+          className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+            linkMode === "signup"
+              ? "bg-primary text-white shadow-md"
+              : "bg-secondary/50 text-muted-foreground border border-border hover:bg-secondary"
+          }`}
+        >
+          <Copy className="w-4 h-4" />
+          Signup Referral
+        </button>
+      </div>
+
       <div className="grid md:grid-cols-2 gap-8">
         {/* Referral Link Section */}
         <div>
           <label className="text-sm font-medium text-foreground mb-3 block">
-            Your Referral Link
+            {linkMode === "purchase" ? "Package Referral Link" : "Signup Referral Link"}
           </label>
           <div className="flex items-center gap-3 mb-4">
             <div className="flex-1 bg-secondary/50 border border-border rounded-xl px-4 py-3 font-mono text-sm text-muted-foreground overflow-x-auto">
-              {fullReferralUrl || "Loading..."}
+              {activeUrl || "Loading..."}
             </div>
             <Button
               variant="outline"
               size="icon"
               onClick={handleCopyLink}
-              disabled={!fullReferralUrl || isRefreshing}
+              disabled={!activeUrl || isRefreshing}
               className="flex-shrink-0 h-12 w-12 rounded-xl border-border hover:border-primary/50 hover:bg-primary/5"
             >
-              {copied ? (
+              {(linkMode === "purchase" ? copiedPurchase : copied) ? (
                 <CheckCircle className="w-5 h-5 text-emerald-500" />
               ) : (
                 <Copy className="w-5 h-5" />
               )}
             </Button>
           </div>
+
+          {linkMode === "purchase" && (
+            <p className="text-xs text-primary/80 bg-primary/5 border border-primary/10 rounded-lg px-3 py-2 mb-4">
+              Share this link to earn rewards when someone purchases a package through it.
+            </p>
+          )}
 
           {/* Share Buttons */}
           <div className="mb-4">
@@ -151,7 +196,7 @@ export function ReferralToolsCard() {
               <Button
                 variant="outline"
                 onClick={() => handleShare("whatsapp")}
-                disabled={!fullReferralUrl || isRefreshing}
+                disabled={!activeUrl || isRefreshing}
                 className="gap-2 rounded-xl border-border hover:border-emerald-500/50 hover:bg-emerald-500/5"
               >
                 <MessageCircle className="w-4 h-4" />
@@ -160,7 +205,7 @@ export function ReferralToolsCard() {
               <Button
                 variant="outline"
                 onClick={() => handleShare("email")}
-                disabled={!fullReferralUrl || isRefreshing}
+                disabled={!activeUrl || isRefreshing}
                 className="gap-2 rounded-xl border-border hover:border-primary/50 hover:bg-primary/5"
               >
                 <Mail className="w-4 h-4" />
@@ -169,7 +214,7 @@ export function ReferralToolsCard() {
               <Button
                 variant="outline"
                 onClick={handleCopyLink}
-                disabled={!fullReferralUrl || isRefreshing}
+                disabled={!activeUrl || isRefreshing}
                 className="gap-2 rounded-xl border-border hover:border-primary/50 hover:bg-primary/5"
               >
                 <Copy className="w-4 h-4" />
@@ -199,9 +244,9 @@ export function ReferralToolsCard() {
             QR Code
           </label>
           <div className="bg-white p-4 rounded-xl border border-border shadow-sm inline-block">
-            {fullReferralUrl ? (
+            {activeUrl ? (
               <QRCodeSVG
-                value={fullReferralUrl}
+                value={activeUrl}
                 size={160}
                 level="H"
                 includeMargin={false}
@@ -215,8 +260,9 @@ export function ReferralToolsCard() {
             )}
           </div>
           <p className="text-xs text-muted-foreground/70 mt-3 max-w-[200px]">
-            Each referral link and QR code can be used once for security and
-            accurate tracking.
+            {linkMode === "purchase"
+              ? "Share this QR code so others can scan and purchase a package using your referral."
+              : "Each referral link and QR code can be used once for security and accurate tracking."}
           </p>
         </div>
       </div>

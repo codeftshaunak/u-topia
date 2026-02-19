@@ -11,7 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { useReferralLink } from "@/hooks/useReferralLink";
 import {
   TrendingUp,
   MessageSquare,
@@ -137,8 +139,11 @@ const upcomingEvents = [
 ];
 
 export default function Explore() {
-  const { toast } = useToast();
+  const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { referralLink } = useReferralLink();
+  const { toast } = useToast();
 
   const handleViewAllConnections = () => {
     navigate("/members");
@@ -398,18 +403,21 @@ export default function Explore() {
             <CardContent className="pt-4">
               <div className="flex items-center gap-2 mb-4">
                 <div className="flex-1 bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-xl px-4 py-3 font-mono text-lg font-bold tracking-widest text-center">
-                  UTOPIA-2847X
+                  {referralLink || "Loading..."}
                 </div>
                 <Button
                   variant="outline"
                   size="icon"
+                  disabled={!referralLink}
                   className="h-12 w-12 rounded-xl border-primary/20 hover:bg-primary/10"
                   onClick={() => {
-                    navigator.clipboard.writeText("UTOPIA-2847X");
-                    toast({
-                      title: "Copied!",
-                      description: "Referral code copied to clipboard.",
-                    });
+                    if (referralLink) {
+                      navigator.clipboard.writeText(referralLink);
+                      toast({
+                        title: "Copied!",
+                        description: "Referral code copied to clipboard.",
+                      });
+                    }
                   }}
                 >
                   <Copy className="h-4 w-4" />
@@ -422,12 +430,15 @@ export default function Explore() {
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={!referralLink}
                   className="w-full sm:flex-1 gap-2 hover:bg-green-500/10 hover:border-green-500/30 hover:text-green-600"
                   onClick={() => {
-                    window.open(
-                      `https://wa.me/?text=${encodeURIComponent("Join U-topia using my referral code: UTOPIA-2847X")}`,
-                      "_blank",
-                    );
+                    if (referralLink) {
+                      window.open(
+                        `https://wa.me/?text=${encodeURIComponent(`Join U-topia using my referral code: ${referralLink}`)}`,
+                        "_blank"
+                      );
+                    }
                   }}
                 >
                   <svg
@@ -442,12 +453,15 @@ export default function Explore() {
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={!referralLink}
                   className="w-full sm:flex-1 gap-2 hover:bg-blue-500/10 hover:border-blue-500/30 hover:text-blue-500"
                   onClick={() => {
-                    window.open(
-                      `https://t.me/share/url?url=${encodeURIComponent("https://utopia.com")}&text=${encodeURIComponent("Join U-topia using my referral code: UTOPIA-2847X")}`,
-                      "_blank",
-                    );
+                    if (referralLink) {
+                      window.open(
+                        `https://t.me/share/url?url=${encodeURIComponent("https://utopia.com")}&text=${encodeURIComponent(`Join U-topia using my referral code: ${referralLink}`)}`,
+                        "_blank"
+                      );
+                    }
                   }}
                 >
                   <svg
@@ -462,12 +476,15 @@ export default function Explore() {
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={!referralLink}
                   className="w-full sm:flex-1 gap-2 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-500"
                   onClick={() => {
-                    window.open(
-                      `mailto:?subject=${encodeURIComponent("Join U-topia!")}&body=${encodeURIComponent("Join U-topia using my referral code: UTOPIA-2847X\n\nSign up at: https://utopia.com")}`,
-                      "_blank",
-                    );
+                    if (referralLink) {
+                      window.open(
+                        `mailto:?subject=${encodeURIComponent("Join U-topia!")}&body=${encodeURIComponent(`Join U-topia using my referral code: ${referralLink}\n\nSign up at: https://utopia.com`)}`,
+                        "_blank"
+                      );
+                    }
                   }}
                 >
                   <svg

@@ -111,12 +111,19 @@ const DashboardPurchase = () => {
 
     setIsCheckoutLoading(true);
     try {
+      // Check for package referral code
+      const referralCode =
+        searchParams.get("ref") ||
+        localStorage.getItem("package_referral_code") ||
+        undefined;
+
       const response = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tier: selectedPackage,
           assetId: selectedAssetId,
+          referralCode,
         }),
       });
 

@@ -100,6 +100,10 @@ const Payment = () => {
   const sessionId = searchParams.get("sessionId");
   const tier = searchParams.get("tier") || "bronze";
 
+  // Get referral code from URL params or localStorage
+  const refCodeParam = searchParams.get("ref");
+  const referralCode = refCodeParam || (typeof window !== "undefined" ? localStorage.getItem("package_referral_code") : null);
+
   // Load supported assets on mount
   useEffect(() => {
     fetchSupportedAssets();
@@ -205,10 +209,14 @@ const Payment = () => {
 
     setIsLoading(true);
     try {
+      const checkoutBody: Record<string, string> = { tier, assetId: selectedAssetId };
+      if (referralCode) {
+        checkoutBody.referralCode = referralCode;
+      }
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tier, assetId: selectedAssetId }),
+        body: JSON.stringify(checkoutBody),
         credentials: "same-origin",
       });
 
@@ -272,6 +280,8 @@ const Payment = () => {
       setPaymentStatus(data);
 
       if (data.status === "completed") {
+        // Clear referral code from localStorage on successful purchase
+        localStorage.removeItem("package_referral_code");
         toast({ title: "Payment Confirmed!", description: "Your membership is now active." });
         setTimeout(() => navigate(`/purchase-success?tier=${data.tier}&session_id=${sid}`), 2000);
       }
@@ -377,6 +387,12 @@ const Payment = () => {
               <p className="text-muted-foreground mt-2">
                 Select how you want to pay
               </p>
+              {referralCode && (
+                <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">
+                  <span className="text-xs text-muted-foreground">Referral Code:</span>
+                  <span className="text-xs font-mono font-bold text-primary">{referralCode}</span>
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
@@ -665,6 +681,14 @@ const Payment = () => {
                       <span className="text-muted-foreground">Tx Hash</span>
                       <span className="font-mono text-xs truncate max-w-[120px]" title={paymentStatus.txHash}>
                         {paymentStatus.txHash.slice(0, 8)}...{paymentStatus.txHash.slice(-6)}
+                      </span>
+                    </div>
+                  )}
+                  {referralCode && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Referral Code</span>
+                      <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
+                        {referralCode}
                       </span>
                     </div>
                   )}

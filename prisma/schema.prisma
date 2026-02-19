@@ -7,7 +7,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // Enums
@@ -68,6 +67,9 @@ model User {
   revenueEvents        RevenueEvent[]
   purchases            Purchase[]
   paymentSessions      PaymentSession[]
+  referredPurchases    Purchase[]       @relation("ReferredPurchases")
+  packageReferralRewards PackageReferralReward[] @relation("ReferrerPackageRewards")
+  buyerPackageRewards    PackageReferralReward[] @relation("BuyerPackageRewards")
 
   @@map("users")
 }
@@ -237,14 +239,20 @@ model Purchase {
   provider               PaymentProvider @default(fireblocks)
   stripeSessionId        String?
   stripePaymentIntentId  String?
+  referralCode           String?         // Referral code used for this package purchase
+  referredByUserId       String?         // User who shared the referral link
   isTest                 Boolean         @default(false)
   createdAt              DateTime        @default(now())
 
   // Relations
-  user              User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
-  paymentSession    PaymentSession?
+  user               User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  referredByUser     User?              @relation("ReferredPurchases", fields: [referredByUserId], references: [id], onDelete: SetNull)
+  paymentSession     PaymentSession?
   transactionHistory TransactionHistory[]
+  packageReferralReward PackageReferralReward?
 
+  @@index([referralCode])
+  @@index([referredByUserId])
   @@map("purchases")
 }
 
@@ -272,6 +280,8 @@ model PaymentSession {
   expiresAt       DateTime
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+
+  referralCode    String?         // Referral code carried through from checkout
 
   // Relations
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
@@ -364,4 +374,27 @@ model ContactSubmission {
   updatedAt DateTime @updatedAt
 
   @@map("contact_submissions")
+}
+
+model PackageReferralReward {
+  id                String   @id @default(cuid())
+  referrerUserId    String   // User who shared the referral link
+  buyerUserId       String   // User who purchased the package
+  purchaseId        String   @unique // The purchase that triggered this reward
+  tier              String   // Package tier purchased
+  purchaseAmountUsd Float    // Purchase amount in USD
+  rewardPercent     Float    @default(10) // Reward percentage
+  rewardAmountUsd   Float    // Calculated reward amount
+  status            String   @default("pending") // pending, approved, paid
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  referrer  User     @relation("ReferrerPackageRewards", fields: [referrerUserId], references: [id], onDelete: Cascade)
+  buyer     User     @relation("BuyerPackageRewards", fields: [buyerUserId], references: [id], onDelete: Cascade)
+  purchase  Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@index([referrerUserId])
+  @@index([buyerUserId])
+  @@map("package_referral_rewards")
 }

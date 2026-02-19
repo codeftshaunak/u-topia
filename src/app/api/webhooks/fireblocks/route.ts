@@ -531,6 +531,43 @@ async function handleCompleted(data: WebhookPayload["data"]) {
     ]);
 
     console.log(`[Webhook] PAYMENT COMPLETED: user=${session.userId} tier=${session.tier} amount=$${amountUsd}`);
+
+    // ─── Package Referral Reward ──────────────────────────────────────
+    // If this purchase was made through a referral link, create a reward
+    // for the referrer.
+    try {
+      const purchase = await prisma.purchase.findUnique({
+        where: { id: session.purchaseId },
+        select: { referredByUserId: true, referralCode: true },
+      });
+
+      if (purchase?.referredByUserId) {
+        const REWARD_PERCENT = 10; // 10% reward on referred package purchases
+        const rewardAmount = parseFloat((pkg.price * REWARD_PERCENT / 100).toFixed(2));
+
+        await prisma.packageReferralReward.create({
+          data: {
+            referrerUserId: purchase.referredByUserId,
+            buyerUserId: session.userId,
+            purchaseId: session.purchaseId,
+            tier: session.tier,
+            purchaseAmountUsd: pkg.price,
+            rewardPercent: REWARD_PERCENT,
+            rewardAmountUsd: rewardAmount,
+            status: "approved",
+          },
+        });
+
+        console.log(
+          `[Webhook] REFERRAL REWARD: referrer=${purchase.referredByUserId} ` +
+          `buyer=${session.userId} tier=${session.tier} reward=$${rewardAmount} ` +
+          `(${REWARD_PERCENT}% of $${pkg.price})`
+        );
+      }
+    } catch (rewardErr) {
+      // Don't fail the whole payment if reward creation fails
+      console.error("[Webhook] Error creating referral reward:", rewardErr);
+    }
   } catch (error) {
     console.error("[Webhook] Error completing payment:", error);
     throw error;

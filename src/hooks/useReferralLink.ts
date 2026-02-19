@@ -103,7 +103,7 @@ export function useReferralLink() {
     fetchReferralLink();
   }, [fetchReferralLink]);
 
-  // Build the full referral URL
+  // Build the full referral URLs
   const baseUrl =
     typeof window !== "undefined"
       ? window.location.origin
@@ -111,10 +111,15 @@ export function useReferralLink() {
   const fullReferralUrl = referralLink
     ? `${baseUrl}/auth?ref=${referralLink}`
     : null;
+  // Package purchase referral URL — directs to purchase page with ref code
+  const fullPurchaseReferralUrl = referralLink
+    ? `${baseUrl}/purchase?ref=${referralLink}`
+    : null;
 
   return {
     referralLink,
     fullReferralUrl,
+    fullPurchaseReferralUrl,
     isLoading,
     isRefreshing,
     error,

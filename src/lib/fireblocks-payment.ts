@@ -315,7 +315,8 @@ export async function createPaymentSession(
   userId: string,
   email: string,
   tier: string,
-  assetId: string
+  assetId: string,
+  referralCode?: string
 ): Promise<PaymentSessionResult> {
   const pkg = TIER_PACKAGES[tier.toLowerCase()];
   if (!pkg) throw new Error("Invalid membership tier");
@@ -388,6 +389,21 @@ export async function createPaymentSession(
   // Format: package:tier:userId:timestamp
   const customerRefId = `pkg:${tier}:${userId}:${Date.now()}`;
 
+  // 5b. Resolve referral code to referrer user ID
+  let referredByUserId: string | null = null;
+  if (referralCode) {
+    const referralLink = await prisma.referralLink.findUnique({
+      where: { code: referralCode },
+      select: { userId: true, isActive: true },
+    });
+    if (referralLink && referralLink.userId !== userId) {
+      referredByUserId = referralLink.userId;
+      console.log(`[Session] Referral code "${referralCode}" resolved to referrer: ${referredByUserId}`);
+    } else {
+      console.log(`[Session] Referral code "${referralCode}" is invalid, inactive, or self-referral`);
+    }
+  }
+
   // 6. Create Purchase + PaymentSession atomically
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
@@ -402,6 +418,8 @@ export async function createPaymentSession(
         status: "pending",
         stripeSessionId: externalTxId,         // backward compat
         stripePaymentIntentId: vaultAccountId,  // backward compat
+        referralCode: referralCode || null,
+        referredByUserId,
         isTest: process.env.FIREBLOCKS_BASE_PATH === "sandbox",
       },
     });
@@ -420,6 +438,7 @@ export async function createPaymentSession(
         vaultAccountId,
         externalTxId,
         customerRefId, // Package tracking reference
+        referralCode: referralCode || null,
         status: "pending",
         isTest: process.env.FIREBLOCKS_BASE_PATH === "sandbox",
         expiresAt,

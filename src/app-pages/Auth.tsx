@@ -343,7 +343,7 @@ const Auth = () => {
                 <p className="text-sm text-red-400">❌ {referralError}</p>
               ) : (
                 <p className="text-sm text-primary">
-                  🎉 You were referred! Your referral code:{" "}
+                  🎉 You were referred! Share your code to earn commissions.
                   <strong>{referralCode}</strong>
                 </p>
               )}
