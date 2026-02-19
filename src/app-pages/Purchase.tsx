@@ -31,8 +31,8 @@ const badgeImages: Record<PackageKey, string> = {
 
 const Purchase = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
-  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const {
     packages,
     isLoading,
@@ -62,44 +62,20 @@ const Purchase = () => {
   );
 
   const handleCheckout = async () => {
-    setIsCheckoutLoading(true);
-    try {
-      const response = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tier: selectedPackage }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to initiate checkout");
-      }
-
-      if (data?.invoiceUrl) {
-        // Redirect to NOWPayments invoice page
-        window.location.href = data.invoiceUrl;
-      } else if (data?.paymentId) {
-        // Alternative: Show payment details in a modal or redirect to custom page
-        toast({
-          title: "Payment Created",
-          description: "Redirecting to payment page...",
-        });
-        // You can implement a custom payment page here
-        window.location.href = data.invoiceUrl || `/payment/${data.paymentId}`;
-      } else {
-        throw new Error("No payment URL received");
-      }
-    } catch (error) {
-      console.error("Checkout error:", error);
+    // Check if user is authenticated
+    if (!user) {
       toast({
-        title: "Checkout Error",
-        description: "Failed to start checkout. Please try again.",
+        title: "Authentication Required",
+        description: "Please sign in to purchase a package.",
         variant: "destructive",
       });
-    } finally {
-      setIsCheckoutLoading(false);
+      // Optionally redirect to auth page
+      window.location.href = "/auth";
+      return;
     }
+
+    // Navigate to payment page where user selects crypto and gets a unique deposit address
+    window.location.href = `/payment?tier=${selectedPackage}`;
   };
 
   if (isLoading) {
@@ -158,18 +134,16 @@ const Purchase = () => {
             </h1>
 
             <p className="text-5xl md:text-6xl font-bold text-primary mb-8">
-              {formatPrice(currentPackage.price_usd)}
+              {formatPrice(currentPackage.priceUsd)}
             </p>
 
             <Button
               size="lg"
               onClick={handleCheckout}
-              disabled={isCheckoutLoading}
               className="w-full md:w-auto bg-primary hover:bg-primary/90 text-white font-semibold px-12 py-7 text-lg rounded-full shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all mb-4"
             >
-              {isCheckoutLoading ? "Processing..." : "Buy Now"}
-              {!isCheckoutLoading && (
-                <svg
+              Buy Now
+              <svg
                   className="w-5 h-5 ml-2"
                   fill="none"
                   stroke="currentColor"
@@ -182,7 +156,6 @@ const Purchase = () => {
                     d="M17 8l4 4m0 0l-4 4m4-4H3"
                   />
                 </svg>
-              )}
             </Button>
 
             <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 mb-8">
@@ -260,7 +233,7 @@ const Purchase = () => {
                       {pkg.name}
                     </h3>
                     <p className="text-xl font-bold text-primary">
-                      {formatPrice(pkg.price_usd)}
+                      {formatPrice(pkg.priceUsd)}
                     </p>
                   </div>
                 </div>

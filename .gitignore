@@ -29,4 +29,10 @@ dist-ssr
 .env.local
 .env.*.local
 
+# Secrets and Credentials
+.secrets/
+*.key
+*.pem
+fireblocks_secret.key
+
 /generated/prisma

@@ -25,7 +25,7 @@ const DEFAULT_PACKAGES: Package[] = [
   {
     id: "default-bronze",
     name: "Bronze",
-    priceUsd: 100,
+    priceUsd: 1,
     shares: 100,
     dividendCapPercent: 2,
     isActive: true,
@@ -33,7 +33,7 @@ const DEFAULT_PACKAGES: Package[] = [
   {
     id: "default-silver",
     name: "Silver",
-    priceUsd: 250,
+    priceUsd: 2,
     shares: 300,
     dividendCapPercent: 3,
     isActive: true,
@@ -41,7 +41,7 @@ const DEFAULT_PACKAGES: Package[] = [
   {
     id: "default-gold",
     name: "Gold",
-    priceUsd: 500,
+    priceUsd: 3,
     shares: 750,
     dividendCapPercent: 4,
     isActive: true,
@@ -49,7 +49,7 @@ const DEFAULT_PACKAGES: Package[] = [
   {
     id: "default-platinum",
     name: "Platinum",
-    priceUsd: 1000,
+    priceUsd: 4,
     shares: 1800,
     dividendCapPercent: 5,
     isActive: true,
@@ -57,7 +57,7 @@ const DEFAULT_PACKAGES: Package[] = [
   {
     id: "default-diamond",
     name: "Diamond",
-    priceUsd: 2500,
+    priceUsd: 5,
     shares: 5000,
     dividendCapPercent: 6,
     isActive: true,

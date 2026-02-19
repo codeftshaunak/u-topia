@@ -1,65 +1,126 @@
+/**
+ * Unified Checkout API
+ *
+ * POST /api/checkout
+ * Body: { tier: string, assetId: string }
+ *
+ * Creates a payment session with a unique deposit address for the selected
+ * cryptocurrency. The user sends crypto to this address and the webhook
+ * handler automatically detects and confirms the payment.
+ *
+ * GET /api/checkout
+ * Returns available providers, tiers, and supported assets.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-import { createCryptoPayment, TIER_PACKAGES } from "@/lib/crypto-payment";
+import { getSessionFromRequest } from "@/lib/auth";
+import {
+  createPaymentSession,
+  TIER_PACKAGES,
+  SUPPORTED_ASSETS,
+  isFireblocksConfigured,
+} from "@/lib/fireblocks-payment";
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSession();
-
+    // Authenticate
+    const session = await getSessionFromRequest(request);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { tier, payCurrency } = body;
+    // Check Fireblocks
+    if (!isFireblocksConfigured()) {
+      return NextResponse.json(
+        { error: "Payment system not configured" },
+        { status: 503 }
+      );
+    }
 
+    const body = await request.json();
+    const { tier, assetId } = body;
+
+    // Validate tier
     if (!tier) {
       return NextResponse.json({ error: "Tier is required" }, { status: 400 });
     }
 
-    const packageInfo = TIER_PACKAGES[tier.toLowerCase()];
-    if (!packageInfo) {
+    const pkg = TIER_PACKAGES[tier.toLowerCase()];
+    if (!pkg) {
       return NextResponse.json({ error: "Invalid tier" }, { status: 400 });
     }
 
-    // Get the base URL for redirects
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL ||
-      request.headers.get("origin") ||
-      "http://localhost:3000";
+    // Validate asset
+    if (!assetId) {
+      return NextResponse.json(
+        { error: "Please select a cryptocurrency (assetId is required)" },
+        { status: 400 }
+      );
+    }
 
-    const successUrl = `${baseUrl}/purchase-success?tier=${tier}`;
-    const cancelUrl = `${baseUrl}/purchase`;
-    const ipnCallbackUrl = `${baseUrl}/api/webhooks/crypto`;
+    const asset = SUPPORTED_ASSETS.find((a) => a.id === assetId);
+    if (!asset) {
+      return NextResponse.json(
+        { error: `Unsupported cryptocurrency: ${assetId}` },
+        { status: 400 }
+      );
+    }
 
-    // Create crypto payment
-    const payment = await createCryptoPayment(
-      tier,
-      session.userId,
+    // Create payment session
+    const paymentSession = await createPaymentSession(
+      session.id,
       session.email,
-      successUrl,
-      cancelUrl,
-      ipnCallbackUrl,
+      tier,
+      assetId
     );
 
-    // Store payment info temporarily for verification
-    // In a production system, you'd store this in a database
     return NextResponse.json({
-      paymentId: payment.payment_id,
-      payAddress: payment.pay_address,
-      payAmount: payment.pay_amount,
-      payCurrency: payment.pay_currency,
-      priceAmount: payment.price_amount,
-      priceCurrency: payment.price_currency,
-      invoiceUrl: payment.invoice_url,
-      orderId: payment.order_id,
-      status: payment.payment_status,
+      provider: "fireblocks",
+      sessionId: paymentSession.sessionId,
+      purchaseId: paymentSession.purchaseId,
+      tier: paymentSession.tier,
+      tierName: pkg.name,
+      priceUsd: paymentSession.priceUsd,
+      amountCrypto: paymentSession.amountCrypto,
+      btcRateUsd: paymentSession.btcRateUsd,
+      assetId: paymentSession.assetId,
+      assetName: paymentSession.assetName,
+      depositAddress: paymentSession.depositAddress,
+      depositTag: paymentSession.depositTag,
+      vaultAccountId: paymentSession.vaultAccountId,
+      expiresAt: paymentSession.expiresAt.toISOString(),
+      supportedAssets: SUPPORTED_ASSETS,
+      instructions: {
+        title: "Complete Your Payment",
+        steps: [
+          `Send exactly ${paymentSession.amountCrypto.toFixed(8)} BTC (≈ $${pkg.price} USD) to the address below`,
+          "Copy the deposit address or scan the QR code with your wallet",
+          "Wait for blockchain confirmation (usually 10–30 minutes for BTC)",
+          "Your membership will activate automatically once confirmed",
+        ],
+        note: `Rate: 1 BTC = $${paymentSession.btcRateUsd.toLocaleString()} USD. Each address is unique to your session.`,
+      },
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Checkout error:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to initiate checkout" },
-      { status: 500 },
-    );
+    const message = error instanceof Error ? error.message : "Failed to initiate checkout";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+/**
+ * GET /api/checkout — Available tiers and assets
+ */
+export async function GET() {
+  return NextResponse.json({
+    provider: "fireblocks",
+    available: isFireblocksConfigured(),
+    tiers: Object.entries(TIER_PACKAGES).map(([key, value]) => ({
+      id: key,
+      name: value.name,
+      price: value.price,
+      shares: value.shares,
+    })),
+    supportedAssets: SUPPORTED_ASSETS,
+  });
 }

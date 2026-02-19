@@ -69,14 +69,14 @@ export function MembershipTiers() {
         <div className="absolute w-[500px] h-[500px] -top-32 left-1/4 rounded-full blur-[120px] opacity-20 bg-primary/40 animate-float" />
         <div className="absolute w-[400px] h-[400px] bottom-0 right-1/4 rounded-full blur-[100px] opacity-15 bg-cyan-500/30 animate-float animation-delay-2000" />
       </div>
-      
+
       {/* Grid pattern overlay */}
       <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
-      
+
       <div className="relative container mx-auto px-6">
         {/* Section Header */}
         <div className="text-center mb-20">
-          <span 
+          <span
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-primary/20 to-cyan-500/20 border border-primary/30 text-primary text-sm font-semibold mb-8 opacity-0 animate-fade-in-up backdrop-blur-sm"
             style={{ animationDelay: '100ms' }}
           >
@@ -85,13 +85,13 @@ export function MembershipTiers() {
             </svg>
             Participation Levels
           </span>
-          <h2 
+          <h2
             className="text-4xl md:text-6xl font-bold text-white mb-6 opacity-0 animate-fade-in-up tracking-tight"
             style={{ animationDelay: '150ms' }}
           >
             Choose Your <span className="bg-gradient-to-r from-primary via-orange-400 to-primary bg-clip-text text-transparent">Tier</span>
           </h2>
-          <p 
+          <p
             className="text-lg md:text-xl text-gray-400 max-w-2xl mx-auto opacity-0 animate-fade-in-up leading-relaxed"
             style={{ animationDelay: '200ms' }}
           >
@@ -100,27 +100,27 @@ export function MembershipTiers() {
         </div>
 
         {/* Tier Cards Grid */}
-        <div 
+        <div
           className="grid grid-cols-2 md:grid-cols-5 gap-5 md:gap-6 opacity-0 animate-fade-in-up pt-6"
           style={{ animationDelay: '250ms' }}
         >
           {packageOrder.map((key, index) => {
             const pkg = packages.find(p => p.name.toLowerCase() === key);
             if (!pkg) return null;
-            
+
             const isGold = key === 'gold';
             const colors = tierColors[key];
-            
+
             return (
-              <div 
-                key={key} 
+              <div
+                key={key}
                 className={`group relative ${isGold ? 'col-span-2 md:col-span-1 overflow-visible' : ''}`}
               >
                 {isGold && (
                   <>
                     {/* Premium glow effect */}
                     <div className="absolute -inset-1 bg-gradient-to-r from-primary via-amber-400 to-primary rounded-3xl blur-lg opacity-30 group-hover:opacity-50 transition-opacity duration-500 animate-pulse" />
-                    
+
                     {/* Most Popular Badge */}
                     <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20">
                       <div className="relative px-4 py-1.5 bg-gradient-to-r from-primary to-amber-500 rounded-full shadow-lg shadow-primary/40">
@@ -134,35 +134,35 @@ export function MembershipTiers() {
                     </div>
                   </>
                 )}
-                
+
                 {!isGold && (
                   <div className={`absolute inset-0 bg-gradient-to-b ${colors.glow} to-transparent rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
                 )}
-                
+
                 <div className={`relative h-full flex flex-col items-center ${isGold ? 'p-8 pt-10' : 'p-8'} rounded-3xl bg-gradient-to-b ${isGold ? 'from-[#1a2d4a] via-[#0f1f35] to-[#0a1628] border-2 border-primary/50 hover:border-primary' : 'from-[#0f1f35] to-[#0a1628] border border-white/[0.08]'} transition-all duration-500 ${colors.border} hover:-translate-y-3 hover:shadow-2xl backdrop-blur-sm`}>
                   {/* Glow ring behind badge */}
                   <div className={`absolute ${isGold ? 'top-16 w-32 h-32' : 'top-12 w-28 h-28'} rounded-full ${isGold ? 'bg-amber-500/15' : `bg-${key === 'bronze' ? 'orange' : key === 'silver' ? 'gray' : key === 'platinum' ? 'slate' : 'cyan'}-500/10`} blur-2xl ${isGold ? '' : 'opacity-0 group-hover:opacity-100'} transition-opacity duration-500`} />
-                  
+
                   {/* Badge Image */}
                   <div className={`relative ${isGold ? 'w-28 h-28 md:w-32 md:h-32' : 'w-24 h-24 md:w-28 md:h-28'} mb-6 group-hover:scale-110 transition-transform duration-500`}>
                     <img src={badgeImages[key]} alt={`${pkg.name} Badge`} className="w-full h-full object-contain drop-shadow-2xl" />
                   </div>
-                  
+
                   {/* Tier Name */}
                   <h3 className="text-xl md:text-2xl font-bold text-white mb-2 tracking-tight">{pkg.name}</h3>
                   <p className="text-sm text-gray-500 mb-4 font-medium">Depth {commissionDepth[key]}</p>
-                  
+
                   {/* Divider */}
                   <div className={`w-16 h-px bg-gradient-to-r from-transparent ${colors.divider} to-transparent mb-4`} />
-                  
+
                   {/* Price */}
                   <p className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-orange-400 bg-clip-text text-transparent mb-4">
-                    {formatPrice(pkg.price_usd)}
+                    {formatPrice(pkg.priceUsd)}
                   </p>
-                  
+
                   {/* View Package Link */}
-                  <Link 
-                    to={`/purchase?tier=${key}`} 
+                  <Link
+                    to={`/purchase?tier=${key}`}
                     className={`text-sm ${linkColors[key]} transition-colors font-medium flex items-center gap-1 mt-auto`}
                   >
                     View Package
@@ -177,7 +177,7 @@ export function MembershipTiers() {
         </div>
 
         {/* Footer note with icon */}
-        <div 
+        <div
           className="flex items-center justify-center gap-3 mt-16 opacity-0 animate-fade-in-up"
           style={{ animationDelay: '350ms' }}
         >

@@ -13,11 +13,11 @@ if (!NOWPAYMENTS_API_KEY) {
 
 // Tier pricing in USD
 export const TIER_PACKAGES: Record<string, { name: string; price: number }> = {
-  bronze: { name: "Bronze Membership", price: 100 },
-  silver: { name: "Silver Membership", price: 250 },
-  gold: { name: "Gold Membership", price: 500 },
-  platinum: { name: "Platinum Membership", price: 1000 },
-  diamond: { name: "Diamond Membership", price: 2500 },
+  bronze: { name: "Bronze Membership", price: 1 },
+  silver: { name: "Silver Membership", price: 2 },
+  gold: { name: "Gold Membership", price: 3 },
+  platinum: { name: "Platinum Membership", price: 4 },
+  diamond: { name: "Diamond Membership", price: 5 },
 };
 
 export interface CryptoPaymentResponse {

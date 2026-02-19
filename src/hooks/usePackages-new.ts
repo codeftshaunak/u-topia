@@ -23,7 +23,9 @@ export function usePackages() {
       try {
         setError(null);
 
-        const response = await fetch('/api/packages');
+        const response = await fetch('/api/packages', {
+          credentials: 'same-origin',
+        });
 
         if (!response.ok) {
           throw new Error('Failed to fetch packages');

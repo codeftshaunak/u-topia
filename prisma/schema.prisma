@@ -7,6 +7,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // Enums
@@ -38,14 +39,23 @@ enum RevenueStatus {
   reversed
 }
 
+enum PaymentProvider {
+  fireblocks
+  stripe
+  manual
+}
+
 // Models
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  password      String
-  emailVerified DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                String         @id @default(cuid())
+  email             String         @unique
+  password          String
+  emailVerified     DateTime?
+  fireblocksVaultId String?        @unique // One-vault-per-user architecture
+  currentPackage    AffiliateTier? // Current active package
+  packageActivatedAt DateTime?     // When the current package was activated
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   // Relations
   profile              Profile?
@@ -57,6 +67,7 @@ model User {
   commissionsFromUser  Commission[]     @relation("ReferredUserCommissions")
   revenueEvents        RevenueEvent[]
   purchases            Purchase[]
+  paymentSessions      PaymentSession[]
 
   @@map("users")
 }
@@ -217,21 +228,61 @@ model Package {
 }
 
 model Purchase {
-  id                     String   @id @default(cuid())
+  id                     String          @id @default(cuid())
   userId                 String?
   email                  String
   tier                   String
   amount                 Float
-  status                 String   @default("pending")
+  status                 String          @default("pending")
+  provider               PaymentProvider @default(fireblocks)
   stripeSessionId        String?
   stripePaymentIntentId  String?
-  isTest                 Boolean  @default(false)
-  createdAt              DateTime @default(now())
+  isTest                 Boolean         @default(false)
+  createdAt              DateTime        @default(now())
 
   // Relations
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user              User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  paymentSession    PaymentSession?
+  transactionHistory TransactionHistory[]
 
   @@map("purchases")
+}
+
+model PaymentSession {
+  id              String          @id @default(cuid())
+  purchaseId      String          @unique
+  userId          String
+  email           String
+  tier            String
+  amountUsd       Float
+  assetId         String
+  depositAddress  String
+  depositTag      String?
+  vaultAccountId  String
+  externalTxId    String          @unique
+  customerRefId   String?         // Reference ID for Fireblocks transaction metadata
+  provider        PaymentProvider @default(fireblocks)
+  status          String          @default("pending")
+  fireblocksStatus String?         // Raw Fireblocks status code (e.g. CONFIRMING, COMPLETED, FAILED)
+  fireblocksTxId  String?
+  txHash          String?
+  amountReceived  Float?
+  amountCrypto    String?         // Stored as string for precision
+  isTest          Boolean         @default(false)
+  expiresAt       DateTime
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([depositAddress])
+  @@index([externalTxId])
+  @@index([customerRefId])
+  @@index([userId, status])
+  @@index([vaultAccountId, status])
+  @@map("payment_sessions")
 }
 
 model ApprovedRevenueSource {
@@ -267,6 +318,38 @@ model PlatformSetting {
   updatedAt   DateTime @updatedAt
 
   @@map("platform_settings")
+}
+
+model TransactionHistory {
+  id                 String          @id @default(cuid())
+  purchaseId         String
+  userId             String?
+  provider           PaymentProvider
+  transactionId      String          // External transaction ID from provider
+  status             String
+  subStatus          String?
+  eventType          String          // webhook event type
+  amount             Float?
+  amountUsd          Float?
+  networkFee         Float?
+  currency           String?
+  txHash             String?
+  sourceAddress      String?
+  destinationAddress String?
+  blockHeight        String?
+  blockHash          String?
+  confirmations      Int?
+  note               String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  // Relations
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId])
+  @@index([transactionId])
+  @@index([userId])
+  @@map("transaction_history")
 }
 
 model ContactSubmission {
