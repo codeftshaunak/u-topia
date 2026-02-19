@@ -340,12 +340,19 @@ export async function createPaymentSession(
 
   if (existingSession) {
     console.log(`Reusing existing payment session ${existingSession.id}`);
-    // Re-fetch live rate so the UI always shows a fresh BTC amount
-    const btcRateUsd = await getBtcRateUsd();
     const storedCrypto = parseFloat(existingSession.amountCrypto || "0");
-    const amountCrypto = storedCrypto > 0
-      ? storedCrypto
-      : usdToBtc(existingSession.amountUsd, btcRateUsd);
+    let amountCrypto: number;
+    let btcRateUsd: number;
+    if (storedCrypto > 0) {
+      // Lock to the original quoted amount — never recompute from a live rate.
+      amountCrypto = storedCrypto;
+      // Derive the original implied rate so the UI is consistent.
+      btcRateUsd = existingSession.amountUsd / storedCrypto;
+    } else {
+      // Legacy session without stored amount — fall back to live rate.
+      btcRateUsd = await getBtcRateUsd();
+      amountCrypto = usdToBtc(existingSession.amountUsd, btcRateUsd);
+    }
     return {
       sessionId: existingSession.id,
       purchaseId: existingSession.purchaseId,

@@ -391,7 +391,10 @@ async function handleCompleted(data: WebhookPayload["data"]) {
           fireblocksTxId: data.id,
           txHash: data.txHash,
           amountReceived: amountUsd,
-          amountCrypto: amountCrypto.toString(),
+          // NOTE: amountCrypto is intentionally NOT updated here.
+          // It stores the required BTC amount (set at session creation) and must
+          // never be overwritten by the received amount. This ensures the UI
+          // always shows the correct amount to pay, even after a partial payment.
         },
       }),
       prisma.purchase.update({
@@ -432,7 +435,9 @@ async function handleCompleted(data: WebhookPayload["data"]) {
           fireblocksTxId: data.id,
           txHash: data.txHash,
           amountReceived: amountUsd,
-          amountCrypto: amountCrypto.toString(),
+          // NOTE: amountCrypto is intentionally NOT updated here.
+          // It stores the required BTC amount (set at session creation) and must
+          // never be overwritten by the received amount.
         },
       }),
 
@@ -550,7 +555,9 @@ async function handleConfirming(data: WebhookPayload["data"]) {
         fireblocksTxId: data.id,
         txHash: data.txHash,
         amountReceived: parseFloat(data.amountInfo.amountUSD || "0"),
-        amountCrypto: data.amountInfo.amount.toString(),
+        // NOTE: amountCrypto is intentionally NOT updated here.
+        // It stores the required BTC amount (set at session creation) and must
+        // never be overwritten by the received amount.
       },
     }),
     prisma.purchase.update({

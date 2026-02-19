@@ -31,12 +31,26 @@ export async function GET(request: NextRequest) {
     const pkg = TIER_PACKAGES[paymentSession.tier];
     const asset = SUPPORTED_ASSETS.find((a) => a.id === paymentSession.assetId);
 
-    // Determine amountCrypto: use stored value or re-compute from live rate
+    // Determine amountCrypto: ALWAYS use the value stored at session creation.
+    // The BTC/USD rate fluctuates — the user must send the exact amount they
+    // were quoted, so we must never recalculate this on reload.
     const storedCrypto = parseFloat(paymentSession.amountCrypto || "0");
-    const btcRateUsd = await getBtcRateUsd();
-    const amountCrypto = storedCrypto > 0
-      ? storedCrypto
-      : usdToBtc(paymentSession.amountUsd, btcRateUsd);
+
+    let amountCrypto: number;
+    let btcRateUsd: number;
+
+    if (storedCrypto > 0) {
+      // Use the stored required amount (locked at session creation – financial invariant).
+      amountCrypto = storedCrypto;
+      // Derive the original rate from stored values so the displayed rate is
+      // consistent with the quoted amount (avoids confusing rate vs amount mismatch).
+      btcRateUsd = paymentSession.amountUsd / storedCrypto;
+    } else {
+      // Fallback: session was created without storing amountCrypto (legacy sessions).
+      // Compute from live rate so the user still sees a valid amount to send.
+      btcRateUsd = await getBtcRateUsd();
+      amountCrypto = usdToBtc(paymentSession.amountUsd, btcRateUsd);
+    }
 
     return NextResponse.json({
       sessionId: paymentSession.sessionId,
