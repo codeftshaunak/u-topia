@@ -131,7 +131,7 @@ export function ReferralToolsCard() {
       </div>
 
       {/* Link Mode Toggle */}
-      <div className="flex gap-2 mb-6">
+      {/* <div className="flex gap-2 mb-6">
         <button
           onClick={() => setLinkMode("purchase")}
           className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
@@ -154,7 +154,7 @@ export function ReferralToolsCard() {
           <Copy className="w-4 h-4" />
           Signup Referral
         </button>
-      </div>
+      </div> */}
 
       <div className="grid md:grid-cols-2 gap-8">
         {/* Referral Link Section */}
