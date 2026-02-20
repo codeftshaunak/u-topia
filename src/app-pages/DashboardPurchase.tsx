@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { usePackages, PackageKey } from "@/hooks/usePackages";
@@ -12,7 +12,14 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Loader2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Loader2, Shield } from "lucide-react";
 const badgeBronze = "/badge-bronze.png";
 const badgeSilver = "/badge-silver.png";
 const badgeGold = "/badge-gold.png";
@@ -29,8 +36,15 @@ const badgeImages: Record<PackageKey, string> = {
 
 const DashboardPurchase = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
+  const [showAssetDialog, setShowAssetDialog] = useState(false);
+  const [supportedAssets, setSupportedAssets] = useState<
+    { id: string; name: string; symbol: string }[]
+  >([]);
+  const [selectedAssetId, setSelectedAssetId] = useState<string>("");
+  const [isLoadingAssets, setIsLoadingAssets] = useState(false);
   const {
     packages,
     isLoading,
@@ -45,12 +59,38 @@ const DashboardPurchase = () => {
     packageOrder.includes(initialPackage) ? initialPackage : "bronze",
   );
 
+  // Fetch supported assets on mount
+  useEffect(() => {
+    fetchSupportedAssets();
+  }, []);
+
   useEffect(() => {
     const tier = searchParams.get("tier") as PackageKey;
     if (tier && packageOrder.includes(tier)) {
       setSelectedPackage(tier);
     }
   }, [searchParams]);
+
+  const fetchSupportedAssets = async () => {
+    try {
+      setIsLoadingAssets(true);
+      const res = await fetch("/api/checkout", { credentials: "same-origin" });
+      const data = await res.json();
+      setSupportedAssets(data.supportedAssets || []);
+      if (data.supportedAssets && data.supportedAssets.length > 0) {
+        setSelectedAssetId(data.supportedAssets[0].id);
+      }
+    } catch (error) {
+      console.error("Failed to fetch supported assets:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load payment methods",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingAssets(false);
+    }
+  };
 
   const currentPackage = packages.find(
     (p) => p.name.toLowerCase() === selectedPackage,
@@ -60,12 +100,24 @@ const DashboardPurchase = () => {
   );
 
   const handleCheckout = async () => {
+    if (!selectedAssetId) {
+      toast({
+        title: "Select a payment method",
+        description: "Please select a cryptocurrency to continue",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsCheckoutLoading(true);
     try {
       const response = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tier: selectedPackage }),
+        body: JSON.stringify({
+          tier: selectedPackage,
+          assetId: selectedAssetId,
+        }),
       });
 
       const data = await response.json();
@@ -74,25 +126,20 @@ const DashboardPurchase = () => {
         throw new Error(data.error || "Failed to initiate checkout");
       }
 
-      if (data?.invoiceUrl) {
-        // Redirect to NOWPayments invoice page
-        window.location.href = data.invoiceUrl;
-      } else if (data?.paymentId) {
-        // Alternative: Show payment details in a modal or redirect to custom page
-        toast({
-          title: "Payment Created",
-          description: "Redirecting to payment page...",
-        });
-        // You can implement a custom payment page here
-        window.location.href = data.invoiceUrl || `/payment/${data.paymentId}`;
+      if (data?.sessionId) {
+        setShowAssetDialog(false);
+        navigate(
+          `/payment?sessionId=${data.sessionId}&tier=${selectedPackage}`
+        );
       } else {
-        throw new Error("No payment URL received");
+        throw new Error("No session ID received");
       }
     } catch (error) {
       console.error("Checkout error:", error);
       toast({
         title: "Checkout Error",
-        description: "Failed to start checkout. Please try again.",
+        description:
+          error instanceof Error ? error.message : "Failed to start checkout. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -153,13 +200,13 @@ const DashboardPurchase = () => {
             </h1>
 
             <p className="text-5xl md:text-6xl font-bold text-primary mb-8">
-              {formatPrice(currentPackage.price_usd)}
+              {formatPrice(currentPackage.priceUsd)}
             </p>
 
             <Button
               size="lg"
-              onClick={handleCheckout}
-              disabled={isCheckoutLoading}
+              onClick={() => setShowAssetDialog(true)}
+              disabled={isCheckoutLoading || isLoadingAssets}
               className="w-full md:w-auto bg-primary hover:bg-primary/90 text-white font-semibold px-12 py-7 text-lg rounded-full shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all mb-4"
             >
               {isCheckoutLoading ? "Processing..." : "Buy Now"}
@@ -255,7 +302,7 @@ const DashboardPurchase = () => {
                       {pkg.name}
                     </h3>
                     <p className="text-xl font-bold text-primary">
-                      {formatPrice(pkg.price_usd)}
+                      {formatPrice(pkg.priceUsd)}
                     </p>
                   </div>
                 </div>
@@ -394,6 +441,83 @@ const DashboardPurchase = () => {
           </Accordion>
         </div>
       </section>
+
+      {/* Asset Selection Dialog */}
+      <Dialog open={showAssetDialog} onOpenChange={setShowAssetDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Select Payment Method</DialogTitle>
+            <DialogDescription>
+              Choose how you want to pay for the {currentPackage?.name} package
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {isLoadingAssets ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : supportedAssets.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No payment methods available
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-3">
+                  {supportedAssets.map((asset) => (
+                    <button
+                      key={asset.id}
+                      onClick={() => setSelectedAssetId(asset.id)}
+                      className={`p-4 rounded-xl border-2 text-left transition-all ${
+                        selectedAssetId === asset.id
+                          ? "border-primary bg-primary/5 shadow-md"
+                          : "border-border hover:border-primary/50 hover:bg-muted/50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center font-semibold text-sm text-primary">
+                          {asset.symbol}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-foreground">
+                            {asset.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {asset.symbol}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <Button
+                  className="w-full py-6 text-base"
+                  onClick={handleCheckout}
+                  disabled={!selectedAssetId || isCheckoutLoading}
+                >
+                  {isCheckoutLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating payment session...
+                    </>
+                  ) : (
+                    `Pay with ${
+                      supportedAssets.find((a) => a.id === selectedAssetId)
+                        ?.name || "Crypto"
+                    }`
+                  )}
+                </Button>
+
+                <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                  <Shield className="w-3 h-3" />
+                  Secured by Fireblocks institutional custody
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
