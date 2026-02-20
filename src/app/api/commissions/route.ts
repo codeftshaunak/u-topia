@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Fetch all multi-layer commissions for this user
     const commissions = await prisma.commission.findMany({
       where: {
         beneficiaryUserId: session.id,

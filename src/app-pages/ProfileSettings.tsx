@@ -44,6 +44,8 @@ import {
   Avatar as AvatarType,
 } from "@/data/avatarLibrary";
 import { useAuth } from "@/contexts/AuthContext";
+import { useGetProfileQuery, useUpdateProfileMutation } from "@/store/features/profile/profileApi";
+import { useDeleteAccountMutation } from "@/store/features/auth/authApi";
 const logoDark = "/u-topia-logo-dark.png";
 
 interface NotificationPreferences {
@@ -63,10 +65,7 @@ const defaultPreferences: NotificationPreferences = {
 const ProfileSettings = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
@@ -76,68 +75,51 @@ const ProfileSettings = () => {
   const [notificationPreferences, setNotificationPreferences] =
     useState<NotificationPreferences>(defaultPreferences);
 
+  const { data: profileData, isLoading: loading } = useGetProfileQuery(
+    undefined,
+    { skip: !user },
+  );
+  const [updateProfile, { isLoading: saving }] = useUpdateProfileMutation();
+  const [deleteAccount, { isLoading: deleting }] = useDeleteAccountMutation();
+
+  // Sync RTK data into local form state once loaded
   useEffect(() => {
-    const fetchProfile = async () => {
-      if (!user) {
-        navigate("/auth");
-        return;
-      }
-
-      try {
-        const response = await fetch("/api/profile", {
-          credentials: 'same-origin',
-        });
-        const data = await response.json();
-
-        if (data.profile) {
-          setFullName(data.profile.fullName || "");
-          setAvatarUrl(data.profile.avatarUrl);
-
-          // Load notification preferences
-          if (data.profile.notificationPreferences) {
-            const prefs = data.profile.notificationPreferences;
-            setNotificationPreferences({
-              marketing:
-                typeof prefs.marketing === "boolean"
-                  ? prefs.marketing
-                  : defaultPreferences.marketing,
-              referral_updates:
-                typeof prefs.referral_updates === "boolean"
-                  ? prefs.referral_updates
-                  : defaultPreferences.referral_updates,
-              commission_alerts:
-                typeof prefs.commission_alerts === "boolean"
-                  ? prefs.commission_alerts
-                  : defaultPreferences.commission_alerts,
-              platform_news:
-                typeof prefs.platform_news === "boolean"
-                  ? prefs.platform_news
-                  : defaultPreferences.platform_news,
-            });
-          }
-
-          // Check if it's a library avatar
-          const allAvatars = [...maleAvatars, ...femaleAvatars];
-          const libraryAvatar = allAvatars.find(
-            (a) => a.url === data.profile.avatarUrl,
-          );
-          if (libraryAvatar) {
-            setSelectedAvatarId(libraryAvatar.id);
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching profile:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (user) {
-      fetchProfile();
-    } else {
+    if (!user) {
       navigate("/auth");
+      return;
     }
-  }, [user, navigate]);
+    if (!profileData?.profile) return;
+
+    const p = profileData.profile;
+    setFullName(p.fullName || "");
+    setAvatarUrl(p.avatarUrl ?? null);
+
+    if (p.notificationPreferences) {
+      const prefs = p.notificationPreferences as Record<string, unknown>;
+      setNotificationPreferences({
+        marketing:
+          typeof prefs.marketing === "boolean"
+            ? prefs.marketing
+            : defaultPreferences.marketing,
+        referral_updates:
+          typeof prefs.referral_updates === "boolean"
+            ? prefs.referral_updates
+            : defaultPreferences.referral_updates,
+        commission_alerts:
+          typeof prefs.commission_alerts === "boolean"
+            ? prefs.commission_alerts
+            : defaultPreferences.commission_alerts,
+        platform_news:
+          typeof prefs.platform_news === "boolean"
+            ? prefs.platform_news
+            : defaultPreferences.platform_news,
+      });
+    }
+
+    const allAvatars = [...maleAvatars, ...femaleAvatars];
+    const libraryAvatar = allAvatars.find((a) => a.url === p.avatarUrl);
+    if (libraryAvatar) setSelectedAvatarId(libraryAvatar.id);
+  }, [profileData, user, navigate]);
 
   const handleFileUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -150,18 +132,10 @@ const ProfileSettings = () => {
   const handleAvatarSelect = async (avatar: AvatarType) => {
     setAvatarUrl(avatar.url);
     setSelectedAvatarId(avatar.id);
-
-    // Save immediately
     try {
-      const response = await fetch("/api/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ avatarUrl: avatar.url }),
-      });
-
-      if (!response.ok) throw new Error("Failed to update");
+      await updateProfile({ avatarUrl: avatar.url }).unwrap();
       toast.success("Avatar updated successfully");
-    } catch (error) {
+    } catch {
       toast.error("Failed to update avatar");
       setAvatarUrl(null);
       setSelectedAvatarId(null);
@@ -180,30 +154,12 @@ const ProfileSettings = () => {
 
   const handleSave = async () => {
     if (!user) return;
-
-    setSaving(true);
-
     try {
-      const response = await fetch("/api/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fullName,
-          avatarUrl,
-          notificationPreferences,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to save profile");
-      }
-
+      await updateProfile({ fullName, avatarUrl: avatarUrl ?? undefined, notificationPreferences }).unwrap();
       toast.success("Profile updated successfully");
     } catch (error: any) {
       console.error("Save error:", error);
       toast.error("Failed to save profile");
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -212,28 +168,15 @@ const ProfileSettings = () => {
       toast.error("Please type DELETE to confirm");
       return;
     }
-
-    setDeleting(true);
-
     try {
-      // Call delete account API endpoint
-      const response = await fetch("/api/auth/delete", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to delete account");
-      }
-
+      await deleteAccount().unwrap();
       toast.success("Account deleted successfully");
       await signOut();
       navigate("/");
     } catch (error: any) {
       console.error("Delete error:", error);
-      toast.error(error.message || "Failed to delete account");
+      toast.error(error?.data?.error || "Failed to delete account");
     } finally {
-      setDeleting(false);
       setDeleteDialogOpen(false);
       setDeleteConfirmation("");
     }

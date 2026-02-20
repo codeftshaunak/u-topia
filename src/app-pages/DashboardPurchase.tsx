@@ -1,11 +1,12 @@
 export const dynamic = "force-dynamic";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { usePackages, PackageKey } from "@/hooks/usePackages";
 import { useAuth } from "@/contexts/AuthContext";
+import { useGetSupportedAssetsQuery, useCreateCheckoutSessionMutation } from "@/store/features/checkout/checkoutApi";
 import {
   Accordion,
   AccordionContent,
@@ -40,14 +41,11 @@ const DashboardPurchase = () => {
   const [searchParams] = useSearchParams();
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [showAssetDialog, setShowAssetDialog] = useState(false);
-  const [supportedAssets, setSupportedAssets] = useState<
-    { id: string; name: string; symbol: string }[]
-  >([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string>("");
-  const [isLoadingAssets, setIsLoadingAssets] = useState(false);
   const {
     packages,
     isLoading,
+    isFetching,
     formatPrice,
     getPackageFeatures,
     getPackageHighlights,
@@ -59,38 +57,23 @@ const DashboardPurchase = () => {
     packageOrder.includes(initialPackage) ? initialPackage : "bronze",
   );
 
-  // Fetch supported assets on mount
+  const { data: assetsData, isLoading: isLoadingAssets } = useGetSupportedAssetsQuery();
+  const supportedAssets = useMemo(() => assetsData?.supportedAssets ?? [], [assetsData]);
+  const [createCheckoutSession] = useCreateCheckoutSessionMutation();
+
+  // Select first asset when assets load
   useEffect(() => {
-    fetchSupportedAssets();
-  }, []);
+    if (!selectedAssetId && supportedAssets.length > 0) {
+      setSelectedAssetId(supportedAssets[0].id);
+    }
+  }, [supportedAssets, selectedAssetId]);
 
   useEffect(() => {
     const tier = searchParams.get("tier") as PackageKey;
     if (tier && packageOrder.includes(tier)) {
       setSelectedPackage(tier);
     }
-  }, [searchParams]);
-
-  const fetchSupportedAssets = async () => {
-    try {
-      setIsLoadingAssets(true);
-      const res = await fetch("/api/checkout", { credentials: "same-origin" });
-      const data = await res.json();
-      setSupportedAssets(data.supportedAssets || []);
-      if (data.supportedAssets && data.supportedAssets.length > 0) {
-        setSelectedAssetId(data.supportedAssets[0].id);
-      }
-    } catch (error) {
-      console.error("Failed to fetch supported assets:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load payment methods",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoadingAssets(false);
-    }
-  };
+  }, [searchParams, packageOrder]);
 
   const currentPackage = packages.find(
     (p) => p.name.toLowerCase() === selectedPackage,
@@ -111,35 +94,24 @@ const DashboardPurchase = () => {
 
     setIsCheckoutLoading(true);
     try {
-      const response = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tier: selectedPackage,
-          assetId: selectedAssetId,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to initiate checkout");
-      }
+      const data = await createCheckoutSession({
+        tier: selectedPackage,
+        assetId: selectedAssetId,
+      }).unwrap();
 
       if (data?.sessionId) {
         setShowAssetDialog(false);
-        navigate(
-          `/payment?sessionId=${data.sessionId}&tier=${selectedPackage}`
-        );
+        navigate(`/payment?sessionId=${data.sessionId}&tier=${selectedPackage}`);
       } else {
         throw new Error("No session ID received");
       }
-    } catch (error) {
-      console.error("Checkout error:", error);
+    } catch (err: unknown) {
+      console.error("Checkout error:", err);
+      const error = err as { data?: { error?: string }; message?: string };
       toast({
         title: "Checkout Error",
         description:
-          error instanceof Error ? error.message : "Failed to start checkout. Please try again.",
+          error?.data?.error ?? (err instanceof Error ? err.message : "Failed to start checkout. Please try again."),
         variant: "destructive",
       });
     } finally {
@@ -175,6 +147,13 @@ const DashboardPurchase = () => {
 
   return (
     <div className="space-y-8">
+      {/* Live DB refresh indicator */}
+      {isFetching && !isLoading && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground animate-pulse px-1">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          <span>Refreshing package data…</span>
+        </div>
+      )}
       {/* Main Product Detail Section */}
       <section className="py-6">
         <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 items-start">

@@ -21,6 +21,7 @@ import {
   ArrowLeft,
   X,
 } from "lucide-react";
+import { useResetPasswordMutation } from "@/store/features/auth/authApi";
 
 type AuthMode = "signin" | "signup" | "forgot";
 
@@ -39,7 +40,6 @@ const Auth = () => {
   const [mode, setMode] = useState<AuthMode>("signup");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [referralError, setReferralError] = useState<string | null>(null);
   const [rememberMe, setRememberMe] = useState(false);
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
   const [showSavedAccounts, setShowSavedAccounts] = useState(false);
@@ -53,6 +53,8 @@ const Auth = () => {
   // Track if user is actively submitting the form - prevents redirect on token refresh
   const isSubmittingRef = useRef(false);
   const emailInputRef = useRef<HTMLDivElement>(null);
+
+  const [resetPassword] = useResetPasswordMutation();
 
   // Load saved accounts on mount
   useEffect(() => {
@@ -155,22 +157,14 @@ const Auth = () => {
     if (!validateForm()) return;
 
     setIsLoading(true);
-
     try {
-      const response = await fetch("/api/auth/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: formData.email.trim().toLowerCase() }),
-      });
-
-      // Always show generic success message for security (don't reveal if email exists)
+      await resetPassword({ email: formData.email.trim().toLowerCase() });
+      // Always show generic success for security
       toast({
         title: "Check Your Email",
         description:
           "If an account exists for this email, we've sent a password reset link.",
       });
-
-      // Go back to sign in
       setMode("signin");
     } catch (err) {
       console.error("Forgot password error:", err);
@@ -199,58 +193,20 @@ const Auth = () => {
 
     try {
       if (mode === "signup") {
-        // Sign up using the custom auth context
+        // Sign up using the custom auth context (referral code is handled atomically in signup API)
         await signUp(
           formData.email.trim().toLowerCase(),
           formData.password,
           formData.name.trim(),
           formData.mobile.trim(),
+          referralCode || undefined,
         );
-
-        // If there's a referral code, mark it as used
-        if (referralCode) {
-          try {
-            const response = await fetch("/api/referrals/use-code", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                code: referralCode,
-                email: formData.email.trim().toLowerCase(),
-              }),
-            });
-
-            const refData = await response.json();
-
-            if (!response.ok || !refData.success) {
-              // Check for specific error messages
-              if (refData.error?.includes("cannot refer yourself")) {
-                setReferralError("You cannot use your own referral code.");
-              } else if (
-                refData.error?.includes("Invalid or expired") ||
-                refData.error?.includes("already")
-              ) {
-                setReferralError(
-                  "This referral code has already been used or is invalid.",
-                );
-              } else if (refData.error?.includes("already been referred")) {
-                setReferralError(
-                  "This email has already been referred by another user.",
-                );
-              } else {
-                setReferralError(
-                  refData.error || "Failed to process referral code.",
-                );
-              }
-            }
-          } catch (refError) {
-            console.error("Error processing referral:", refError);
-            setReferralError("Failed to process referral code.");
-          }
-        }
 
         toast({
           title: "Welcome to U-topia!",
-          description: "Your account has been created successfully.",
+          description: referralCode
+            ? "Your account has been created with a referral link!"
+            : "Your account has been created successfully.",
         });
       } else {
         // Sign in using the custom auth context
@@ -332,21 +288,11 @@ const Auth = () => {
         <div className="w-full max-w-md">
           {/* Referral badge */}
           {referralCode && isSignUp && (
-            <div
-              className={`mb-6 p-3 rounded-xl text-center ${
-                referralError
-                  ? "bg-red-500/10 border border-red-500/30"
-                  : "bg-primary/10 border border-primary/20"
-              }`}
-            >
-              {referralError ? (
-                <p className="text-sm text-red-400">❌ {referralError}</p>
-              ) : (
-                <p className="text-sm text-primary">
-                  🎉 You were referred! Your referral code:{" "}
-                  <strong>{referralCode}</strong>
-                </p>
-              )}
+            <div className="mb-6 p-3 rounded-xl text-center bg-primary/10 border border-primary/20">
+              <p className="text-sm text-primary">
+                🎉 You were invited! Sign up to join through referral code{" "}
+                <strong>{referralCode}</strong>
+              </p>
             </div>
           )}
 

@@ -44,9 +44,9 @@ interface LayerBreakdownProps {
 }
 
 function LayerBreakdown({ byLayer }: LayerBreakdownProps) {
-  const layers = [1, 2, 3, 4, 5];
-  const rates = [12, 8, 4, 2, 1];
-  
+  const layers = [1, 2, 3, 4, 5, 6];
+  const rates = [10, 5, 2.5, 1.25, 0.625, 0.3175];
+
   return (
     <div className="feature-card p-5">
       <div className="flex items-center gap-3 mb-4">

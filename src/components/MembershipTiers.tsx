@@ -1,5 +1,5 @@
-import { Link } from "react-router-dom";
-import { usePackages, PackageKey } from "@/hooks/usePackages";
+import Link from "next/link";
+import { usePackages, PackageKey, getCommissionLevels } from "@/hooks/usePackages";
 import { Skeleton } from "@/components/ui/skeleton";
 const badgeBronze = "/badge-bronze.png";
 const badgeSilver = "/badge-silver.png";
@@ -31,14 +31,7 @@ const linkColors: Record<PackageKey, string> = {
   diamond: 'text-cyan-400 hover:text-primary',
 };
 
-// Commission depth based on tier
-const commissionDepth: Record<PackageKey, number> = {
-  bronze: 1,
-  silver: 2,
-  gold: 3,
-  platinum: 4,
-  diamond: 5,
-};
+// Commission depth comes from pkg.commissionLevels — no static map needed
 
 export function MembershipTiers() {
   const { packages, isLoading, formatPrice, packageOrder } = usePackages();
@@ -150,7 +143,7 @@ export function MembershipTiers() {
 
                   {/* Tier Name */}
                   <h3 className="text-xl md:text-2xl font-bold text-white mb-2 tracking-tight">{pkg.name}</h3>
-                  <p className="text-sm text-gray-500 mb-4 font-medium">Depth {commissionDepth[key]}</p>
+                  <p className="text-sm text-gray-500 mb-4 font-medium">Depth {getCommissionLevels(pkg).length}</p>
 
                   {/* Divider */}
                   <div className={`w-16 h-px bg-gradient-to-r from-transparent ${colors.divider} to-transparent mb-4`} />
@@ -162,7 +155,7 @@ export function MembershipTiers() {
 
                   {/* View Package Link */}
                   <Link
-                    to={`/purchase?tier=${key}`}
+                    href={`/purchase?tier=${key}`}
                     className={`text-sm ${linkColors[key]} transition-colors font-medium flex items-center gap-1 mt-auto`}
                   >
                     View Package

@@ -1,124 +1,90 @@
-import { useState, useEffect, useCallback } from "react";
+/**
+ * useReferralLink – RTK Query backed hook.
+ * Drop-in replacement for the previous useState/useEffect version.
+ *
+ * IMPORTANT: Referral links are only available to users who have purchased a package.
+ * The API returns a 403 with `hasPackage: false` if the user hasn't bought one yet.
+ */
+import { useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import {
+  useGetReferralLinkQuery,
+  useRegenerateReferralLinkMutation,
+} from "@/store/features/referrals/referralsApi";
 
 export function useReferralLink() {
   const { user } = useAuth();
-  const [referralLink, setReferralLink] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const fetchReferralLink = useCallback(async () => {
-    try {
-      setError(null);
+  const {
+    data,
+    isLoading,
+    isFetching: isRefreshing,
+    error,
+    refetch,
+  } = useGetReferralLinkQuery(undefined, { skip: !user });
 
-      if (!user) {
-        setIsLoading(false);
-        return;
-      }
+  const [regenerate, { isLoading: isRegenerating }] =
+    useRegenerateReferralLinkMutation();
 
-      const response = await fetch("/api/referrals/link", {
-        method: "GET",
-        credentials: "include",
-      });
+  const referralCode = data?.code ?? null;
 
-      if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ error: "Failed to fetch referral link" }));
-        console.error("Error fetching referral link:", errorData);
-        setError("Failed to fetch referral link");
-        return;
-      }
-
-      const data = await response.json();
-
-      if (data?.code) {
-        setReferralLink(data.code);
-      }
-    } catch (err) {
-      console.error("Error in fetchReferralLink:", err);
-      setError("Failed to fetch referral link");
-    } finally {
-      setIsLoading(false);
+  // Detect if the user doesn't have a package (403 from API)
+  const hasPackage = useMemo(() => {
+    if (data?.hasPackage === true) return true;
+    if (data?.hasPackage === false) return false;
+    // Check the error response for the hasPackage flag
+    if (error && "data" in error) {
+      const errData = error.data as Record<string, unknown>;
+      if (errData?.hasPackage === false) return false;
     }
-  }, [user]);
+    // Default: if we have data, user has a package
+    if (data?.code) return true;
+    return null; // Unknown (loading)
+  }, [data, error]);
 
-  const regenerateLink = useCallback(async () => {
-    try {
-      setIsRefreshing(true);
-      setError(null);
+  const { fullReferralUrl } = useMemo(() => {
+    if (!referralCode) return { fullReferralUrl: null };
+    const base =
+      typeof window !== "undefined" ? window.location.origin : "https://u-topia.com";
+    return {
+      fullReferralUrl: `${base}/auth?ref=${referralCode}`,
+    };
+  }, [referralCode]);
 
-      if (!user) {
-        toast({
-          title: "Not Authenticated",
-          description: "Please log in to generate a referral link.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const response = await fetch("/api/referrals/link", {
-        method: "POST",
-        credentials: "include",
+  const regenerateLink = async () => {
+    if (!user) {
+      toast({
+        title: "Not Authenticated",
+        description: "Please log in to generate a referral link.",
+        variant: "destructive",
       });
-
-      if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ error: "Failed to generate referral link" }));
-        console.error("Error generating referral link:", errorData);
-        toast({
-          title: "Error",
-          description: "Failed to generate a new referral link.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const data = await response.json();
-
-      if (data?.code) {
-        setReferralLink(data.code);
-        toast({
-          title: "Link Refreshed",
-          description: "Your new referral link is ready.",
-        });
-      }
-    } catch (err) {
-      console.error("Error in regenerateLink:", err);
+      return;
+    }
+    try {
+      await regenerate().unwrap();
+      toast({
+        title: "Link Refreshed",
+        description: "Your new referral link is ready.",
+      });
+    } catch {
       toast({
         title: "Error",
         description: "Failed to generate a new referral link.",
         variant: "destructive",
       });
-    } finally {
-      setIsRefreshing(false);
     }
-  }, [user, toast]);
-
-  useEffect(() => {
-    fetchReferralLink();
-  }, [fetchReferralLink]);
-
-  // Build the full referral URL
-  const baseUrl =
-    typeof window !== "undefined"
-      ? window.location.origin
-      : "https://u-topia.com";
-  const fullReferralUrl = referralLink
-    ? `${baseUrl}/auth?ref=${referralLink}`
-    : null;
+  };
 
   return {
-    referralLink,
+    referralLink: referralCode,
     fullReferralUrl,
-    isLoading,
-    isRefreshing,
-    error,
+    hasPackage,
+    isLoading: isLoading && !data,
+    isRefreshing: isRefreshing || isRegenerating,
+    error: error && hasPackage !== false ? "Failed to fetch referral link" : null,
     regenerateLink,
-    refetch: fetchReferralLink,
+    refetch: () => { refetch(); },
   };
 }

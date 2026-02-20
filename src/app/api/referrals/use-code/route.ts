@@ -15,10 +15,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find referral link
+    // Find referral link (must be active)
     const referralLink = await prisma.referralLink.findUnique({
       where: { code },
-      include: { user: true },
+      include: { user: { select: { id: true, email: true, currentPackage: true } } },
     });
 
     if (!referralLink || !referralLink.isActive) {
@@ -28,10 +28,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if already used
-    if (referralLink.usedAt) {
+    // Referrer must have a package to generate valid referrals
+    if (!referralLink.user.currentPackage) {
       return NextResponse.json(
-        { error: 'This referral code has already been used' },
+        { error: 'Referrer has not purchased a package yet' },
         { status: 400 }
       );
     }
@@ -56,38 +56,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user has already been referred
-    const existingReferral = await prisma.referral.findFirst({
-      where: {
-        referredUserId: referredUser.id,
-      },
-    });
-
-    if (existingReferral) {
+    // Check if user already has a referrer
+    if (referredUser.referredByUserId) {
       return NextResponse.json(
         { error: 'This user has already been referred by another user' },
         { status: 400 }
       );
     }
 
-    // Create referral
-    await prisma.referral.create({
-      data: {
-        referrerUserId: referralLink.userId,
-        referredUserId: referredUser.id,
-        status: 'pending',
-      },
-    });
+    // Set referredByUserId on the user and create Referral record atomically
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: referredUser.id },
+        data: { referredByUserId: referralLink.userId },
+      }),
+      prisma.referral.create({
+        data: {
+          referrerUserId: referralLink.userId,
+          referredUserId: referredUser.id,
+          status: 'active',
+        },
+      }),
+    ]);
 
-    // Mark referral link as used
-    await prisma.referralLink.update({
-      where: { id: referralLink.id },
-      data: {
-        usedAt: new Date(),
-        usedByEmail: email.toLowerCase(),
-        isActive: false,
-      },
-    });
+    // NOTE: Referral links are reusable — we do NOT deactivate them
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -1,14 +1,4 @@
--- CreateEnum
-CREATE TYPE "AffiliateTier" AS ENUM ('bronze', 'silver', 'gold', 'platinum', 'diamond');
-
--- CreateEnum
-CREATE TYPE "CommissionStatus" AS ENUM ('pending', 'approved', 'paid', 'reversed', 'held');
-
--- CreateEnum
-CREATE TYPE "ReferralStatus" AS ENUM ('pending', 'active', 'invalid');
-
--- CreateEnum
-CREATE TYPE "RevenueStatus" AS ENUM ('pending', 'settled', 'reversed');
+-- Enums already exist in database, skipping CREATE TYPE statements
 
 -- CreateTable
 CREATE TABLE "users" (

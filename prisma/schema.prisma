@@ -7,7 +7,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // Enums
@@ -47,17 +46,20 @@ enum PaymentProvider {
 
 // Models
 model User {
-  id                String         @id @default(cuid())
-  email             String         @unique
-  password          String
-  emailVerified     DateTime?
-  fireblocksVaultId String?        @unique // One-vault-per-user architecture
-  currentPackage    AffiliateTier? // Current active package
-  packageActivatedAt DateTime?     // When the current package was activated
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  id                 String         @id @default(cuid())
+  email              String         @unique
+  password           String
+  emailVerified      DateTime?
+  fireblocksVaultId  String?        @unique // One-vault-per-user architecture
+  currentPackage     AffiliateTier? // Current active package
+  packageActivatedAt DateTime?      // When the current package was activated
+  referredByUserId   String?        // Who referred this user (permanent chain link)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
   // Relations
+  referredBy           User?          @relation("UserReferralChain", fields: [referredByUserId], references: [id], onDelete: SetNull)
+  referredUsers        User[]         @relation("UserReferralChain")
   profile              Profile?
   affiliateStatus      AffiliateStatus?
   referralLinksCreated ReferralLink[]
@@ -68,7 +70,9 @@ model User {
   revenueEvents        RevenueEvent[]
   purchases            Purchase[]
   paymentSessions      PaymentSession[]
+  referredPurchases    Purchase[]       @relation("ReferredPurchases")
 
+  @@index([referredByUserId])
   @@map("users")
 }
 
@@ -182,15 +186,7 @@ model Commission {
   @@map("commission_ledger")
 }
 
-model CommissionRate {
-  layer       Int      @id
-  ratePercent Float
-  isActive    Boolean  @default(true)
-  updatedBy   String?
-  updatedAt   DateTime @updatedAt
 
-  @@map("commission_rates")
-}
 
 model RevenueEvent {
   id                String        @id @default(cuid())
@@ -212,17 +208,15 @@ model RevenueEvent {
 }
 
 model Package {
-  id                 String   @id @default(cuid())
-  name               String   @unique
-  priceUsd           Float
-  shares             Int
-  dividendCapPercent Float
-  stripeProductId    String?
-  stripePriceId      String?
-  isActive           Boolean  @default(true)
-  updatedBy          String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id               String   @id @default(cuid())
+  name             String   @unique
+  priceUsd         Float
+  isActive         Boolean  @default(true)
+  updatedBy        String?
+  // UniLevel commission levels: [{ level: 1, rate: 10 }, { level: 2, rate: 5 }, ...]
+  commissionLevels Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@map("packages")
 }
@@ -237,14 +231,19 @@ model Purchase {
   provider               PaymentProvider @default(fireblocks)
   stripeSessionId        String?
   stripePaymentIntentId  String?
+  referralCode           String?         // Referral code used for this package purchase
+  referredByUserId       String?         // User who shared the referral link
   isTest                 Boolean         @default(false)
   createdAt              DateTime        @default(now())
 
   // Relations
-  user              User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
-  paymentSession    PaymentSession?
+  user               User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  referredByUser     User?              @relation("ReferredPurchases", fields: [referredByUserId], references: [id], onDelete: SetNull)
+  paymentSession     PaymentSession?
   transactionHistory TransactionHistory[]
 
+  @@index([referralCode])
+  @@index([referredByUserId])
   @@map("purchases")
 }
 
@@ -272,6 +271,8 @@ model PaymentSession {
   expiresAt       DateTime
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+
+  referralCode    String?         // Referral code carried through from checkout
 
   // Relations
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
@@ -365,3 +366,5 @@ model ContactSubmission {
 
   @@map("contact_submissions")
 }
+
+

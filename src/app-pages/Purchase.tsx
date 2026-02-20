@@ -36,6 +36,7 @@ const Purchase = () => {
   const {
     packages,
     isLoading,
+    isFetching,
     formatPrice,
     getPackageFeatures,
     getPackageHighlights,
@@ -52,7 +53,7 @@ const Purchase = () => {
     if (tier && packageOrder.includes(tier)) {
       setSelectedPackage(tier);
     }
-  }, [searchParams]);
+  }, [searchParams, packageOrder]);
 
   const currentPackage = packages.find(
     (p) => p.name.toLowerCase() === selectedPackage,
@@ -69,8 +70,7 @@ const Purchase = () => {
         description: "Please sign in to purchase a package.",
         variant: "destructive",
       });
-      // Optionally redirect to auth page
-      window.location.href = "/auth";
+      window.location.href = `/auth?redirect=/purchase?tier=${selectedPackage}`;
       return;
     }
 
@@ -108,6 +108,14 @@ const Purchase = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
+      {/* Live DB refresh indicator */}
+      {isFetching && !isLoading && (
+        <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground animate-pulse py-2">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          <span>Refreshing package data…</span>
+        </div>
+      )}
+
 
       {/* Main Product Detail Section */}
       <section className="container mx-auto px-6 py-12 md:py-20">

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { ReferralToolsCard } from "@/components/ReferralToolsCard";
 import { ReferralChart } from "@/components/dashboard/ReferralChart";
 import { ReferralTable } from "@/components/dashboard/ReferralTable";
 import { RewardsBreakdown } from "@/components/dashboard/RewardsBreakdown";
@@ -18,13 +17,14 @@ import {
   RankOverview,
 } from "@/components/dashboard/RankOverview";
 import { usePackages, PackageKey } from "@/hooks/usePackages";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+// Dialog imports kept for package upgrade UI (commented out, moved to purchase page)
+// import {
+//   Dialog,
+//   DialogContent,
+//   DialogHeader,
+//   DialogTitle,
+//   DialogDescription,
+// } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import NetworkVisualization from "@/components/community/NetworkVisualization";
@@ -41,11 +41,13 @@ import {
   BookOpen,
   History,
   Loader2,
-  ArrowUpCircle,
+  // ArrowUpCircle, // package upgrade UI — commented out
   ArrowUpRight,
   Copy,
   Wallet,
 } from "lucide-react";
+import { useReferralLink } from "@/hooks/useReferralLink";
+import { ReferralToolsCard } from "@/components/ReferralToolsCard";
 
 const tierBadges: Record<string, string> = {
   bronze: badgeBronze,
@@ -69,11 +71,13 @@ const cardPending = "/card-shares.jpg";
 export default function Dashboard() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
-  const [isUpgradeDialogOpen, setIsUpgradeDialogOpen] = useState(false);
+  // isUpgradeDialogOpen kept for package upgrade dialog (commented out)
+  // const [isUpgradeDialogOpen, setIsUpgradeDialogOpen] = useState(false);
   const { user } = useAuth();
   const { summary, affiliateStatus, activeReferrals } = useCommissions();
   const { packages, formatPrice } = usePackages();
   const { toast } = useToast();
+  const { referralLink } = useReferralLink();
 
   useEffect(() => {
     if (!user) {
@@ -97,10 +101,10 @@ export default function Dashboard() {
   const displayActiveReferrals = activeReferrals;
   const rankInfo = calculateRankInfo(displayActiveReferrals);
 
-  // Get available upgrades (tiers higher than current)
-  const currentTierIndex = tierOrder.indexOf(currentTier);
-  const availableUpgrades = tierOrder.slice(currentTierIndex + 1);
-  const hasUpgradesAvailable = availableUpgrades.length > 0;
+  // Package upgrade vars — kept for future use (upgrade dialog commented out)
+  // const currentTierIndex = tierOrder.indexOf(currentTier);
+  // const availableUpgrades = tierOrder.slice(currentTierIndex + 1);
+  // const hasUpgradesAvailable = availableUpgrades.length > 0;
 
   return (
     <>
@@ -210,18 +214,21 @@ export default function Dashboard() {
               </div>
               <div>
                 <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-lg px-3 py-2 font-mono text-lg font-bold tracking-widest text-center mb-2">
-                  UTOPIA-2847X
+                  {referralLink || "Loading..."}
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   className="w-full"
+                  disabled={!referralLink}
                   onClick={() => {
-                    navigator.clipboard.writeText("UTOPIA-2847X");
-                    toast({
-                      title: "Copied!",
-                      description: "Referral code copied to clipboard.",
-                    });
+                    if (referralLink) {
+                      navigator.clipboard.writeText(referralLink);
+                      toast({
+                        title: "Copied!",
+                        description: "Referral code copied to clipboard.",
+                      });
+                    }
                   }}
                 >
                   Copy Code
@@ -292,50 +299,37 @@ export default function Dashboard() {
               {getTierLabel(currentTier)}
             </p>
             <p className="text-sm text-muted-foreground mb-3">Current Tier</p>
-            {hasUpgradesAvailable && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setIsUpgradeDialogOpen(true)}
-                className="w-full gap-2 text-primary border-primary/30 hover:bg-primary/10 hover:border-primary/50"
-              >
-                <ArrowUpCircle className="w-4 h-4" />
-                Upgrade Tier
-              </Button>
-            )}
+            {/* Upgrade Tier button moved to purchase page */}
           </div>
         </div>
       </section>
 
-      {/* Referral Tools */}
+      {/* Referred Users */}
       <section className="container mx-auto px-6 pb-12">
         <div className="mb-6">
           <h2 className="text-xl font-semibold text-foreground mb-1">
-            Your Referral Tools
+            Referred Users
           </h2>
           <p className="text-sm text-muted-foreground">
-            Share your link to invite new users and businesses.
+            Your referrals, commission status, and rewards breakdown.
           </p>
         </div>
         <ReferralToolsCard />
       </section>
 
-      {/* Referral Chart */}
+
       <section className="container mx-auto px-6 pb-12">
         <ReferralChart />
       </section>
 
-      {/* Referral Table */}
       <section className="container mx-auto px-6 pb-12">
         <ReferralTable />
       </section>
 
-      {/* Rewards Breakdown */}
       <section className="container mx-auto px-6 pb-12">
         <RewardsBreakdown />
       </section>
 
-      {/* Rank Overview */}
       <section className="container mx-auto px-6 pb-12">
         <RankOverview qualifyingReferrals={displayActiveReferrals} />
       </section>
@@ -364,69 +358,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Upgrade Dialog */}
-      <Dialog open={isUpgradeDialogOpen} onOpenChange={setIsUpgradeDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold">
-              Upgrade Your Tier
-            </DialogTitle>
-            <DialogDescription>
-              Unlock deeper commission layers and increased earning potential.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 mt-4">
-            {availableUpgrades.map((tierKey) => {
-              const pkg = packages.find(
-                (p) => p.name.toLowerCase() === tierKey,
-              );
-              if (!pkg) return null;
-
-              const tierIndex = tierOrder.indexOf(tierKey);
-              const depthLimit = tierIndex + 1;
-
-              return (
-                <button
-                  key={tierKey}
-                  onClick={() => {
-                    setIsUpgradeDialogOpen(false);
-                    navigate(`/purchase?tier=${tierKey}`);
-                  }}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl border border-border bg-card hover:border-primary/50 hover:bg-primary/5 transition-all group"
-                >
-                  <img
-                    src={tierBadges[tierKey]}
-                    alt={pkg.name}
-                    className="w-12 h-12 object-contain group-hover:scale-110 transition-transform"
-                  />
-                  <div className="flex-1 text-left">
-                    <p className="font-semibold text-foreground">{pkg.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Up to {depthLimit} commission layer
-                      {depthLimit > 1 ? "s" : ""}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-primary">
-                      {formatPrice(pkg.priceUsd)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">One-time</p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {currentTier === "diamond" && (
-            <div className="mt-4 p-4 rounded-xl bg-primary/10 border border-primary/20 text-center">
-              <p className="text-sm text-primary font-medium">
-                🎉 You're already at the highest tier!
-              </p>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Package Upgrade Dialog moved to purchase page */}
     </>
   );
 }

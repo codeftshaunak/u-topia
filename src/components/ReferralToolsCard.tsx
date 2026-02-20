@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -11,6 +12,8 @@ import {
   RefreshCw,
   CheckCircle,
   Loader2,
+  ShoppingBag,
+  Lock,
 } from "lucide-react";
 
 export function ReferralToolsCard() {
@@ -19,23 +22,26 @@ export function ReferralToolsCard() {
   const {
     referralLink,
     fullReferralUrl,
+    hasPackage,
     isLoading,
     isRefreshing,
     regenerateLink,
   } = useReferralLink();
   const [copied, setCopied] = useState(false);
 
+  const activeUrl = fullReferralUrl;
+
   const handleCopyLink = async () => {
-    if (!fullReferralUrl) return;
+    if (!activeUrl) return;
 
     try {
-      await navigator.clipboard.writeText(fullReferralUrl);
+      await navigator.clipboard.writeText(activeUrl);
       setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
       toast({
         title: "Link Copied",
         description: "Referral link copied to clipboard.",
       });
-      setTimeout(() => setCopied(false), 2000);
     } catch {
       toast({
         title: "Copy Failed",
@@ -46,11 +52,9 @@ export function ReferralToolsCard() {
   };
 
   const handleShare = (platform: string) => {
-    if (!fullReferralUrl) return;
+    if (!activeUrl) return;
 
-    const message = encodeURIComponent(
-      "Join U-topia using my referral link: " + fullReferralUrl,
-    );
+    const message = encodeURIComponent("Join U-topia using my referral link: " + activeUrl);
     let url = "";
 
     switch (platform) {
@@ -95,6 +99,28 @@ export function ReferralToolsCard() {
     );
   }
 
+  // No package — must purchase before sharing referral link
+  if (hasPackage === false) {
+    return (
+      <div className="feature-card p-8 md:p-10">
+        <div className="text-center py-8">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+            <Lock className="w-8 h-8 text-amber-500" />
+          </div>
+          <h3 className="text-lg font-semibold text-foreground mb-2">
+            Package Required
+          </h3>
+          <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
+            You need to purchase a package before you can share your referral link and earn commissions.
+          </p>
+          <Button asChild>
+            <Link href="/purchase">Purchase a Package</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="feature-card p-8 md:p-10">
       {/* Status Indicator */}
@@ -117,6 +143,8 @@ export function ReferralToolsCard() {
         </div>
       </div>
 
+      {/* Link Mode Toggle - removed, only signup referral links now */}
+
       <div className="grid md:grid-cols-2 gap-8">
         {/* Referral Link Section */}
         <div>
@@ -125,13 +153,13 @@ export function ReferralToolsCard() {
           </label>
           <div className="flex items-center gap-3 mb-4">
             <div className="flex-1 bg-secondary/50 border border-border rounded-xl px-4 py-3 font-mono text-sm text-muted-foreground overflow-x-auto">
-              {fullReferralUrl || "Loading..."}
+              {activeUrl || "Loading..."}
             </div>
             <Button
               variant="outline"
               size="icon"
               onClick={handleCopyLink}
-              disabled={!fullReferralUrl || isRefreshing}
+              disabled={!activeUrl || isRefreshing}
               className="flex-shrink-0 h-12 w-12 rounded-xl border-border hover:border-primary/50 hover:bg-primary/5"
             >
               {copied ? (
@@ -142,6 +170,10 @@ export function ReferralToolsCard() {
             </Button>
           </div>
 
+          <p className="text-xs text-primary/80 bg-primary/5 border border-primary/10 rounded-lg px-3 py-2 mb-4">
+            Share this link to invite new users. When they sign up and purchase a package, you earn commissions up through your commission depth.
+          </p>
+
           {/* Share Buttons */}
           <div className="mb-4">
             <label className="text-sm font-medium text-foreground mb-3 block">
@@ -151,7 +183,7 @@ export function ReferralToolsCard() {
               <Button
                 variant="outline"
                 onClick={() => handleShare("whatsapp")}
-                disabled={!fullReferralUrl || isRefreshing}
+                disabled={!activeUrl || isRefreshing}
                 className="gap-2 rounded-xl border-border hover:border-emerald-500/50 hover:bg-emerald-500/5"
               >
                 <MessageCircle className="w-4 h-4" />
@@ -160,7 +192,7 @@ export function ReferralToolsCard() {
               <Button
                 variant="outline"
                 onClick={() => handleShare("email")}
-                disabled={!fullReferralUrl || isRefreshing}
+                disabled={!activeUrl || isRefreshing}
                 className="gap-2 rounded-xl border-border hover:border-primary/50 hover:bg-primary/5"
               >
                 <Mail className="w-4 h-4" />
@@ -169,7 +201,7 @@ export function ReferralToolsCard() {
               <Button
                 variant="outline"
                 onClick={handleCopyLink}
-                disabled={!fullReferralUrl || isRefreshing}
+                disabled={!activeUrl || isRefreshing}
                 className="gap-2 rounded-xl border-border hover:border-primary/50 hover:bg-primary/5"
               >
                 <Copy className="w-4 h-4" />
@@ -199,9 +231,9 @@ export function ReferralToolsCard() {
             QR Code
           </label>
           <div className="bg-white p-4 rounded-xl border border-border shadow-sm inline-block">
-            {fullReferralUrl ? (
+            {activeUrl ? (
               <QRCodeSVG
-                value={fullReferralUrl}
+                value={activeUrl}
                 size={160}
                 level="H"
                 includeMargin={false}
@@ -215,8 +247,7 @@ export function ReferralToolsCard() {
             )}
           </div>
           <p className="text-xs text-muted-foreground/70 mt-3 max-w-[200px]">
-            Each referral link and QR code can be used once for security and
-            accurate tracking.
+            Share this QR code so others can scan and sign up using your referral link.
           </p>
         </div>
       </div>

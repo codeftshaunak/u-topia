@@ -23,7 +23,8 @@ interface AuthContextType {
     email: string,
     password: string,
     fullName?: string,
-    mobile?: string
+    mobile?: string,
+    referralCode?: string
   ) => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -81,12 +82,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     email: string,
     password: string,
     fullName?: string,
-    mobile?: string
+    mobile?: string,
+    referralCode?: string
   ) => {
     const response = await fetch('/api/auth/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, fullName, mobile }),
+      body: JSON.stringify({ email, password, fullName, mobile, referralCode }),
       credentials: 'same-origin',
     });
 

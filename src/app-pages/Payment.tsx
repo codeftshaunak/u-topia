@@ -19,6 +19,12 @@ import {
   ExternalLink,
   Shield,
 } from "lucide-react";
+import {
+  useGetSupportedAssetsQuery,
+  useCreateCheckoutSessionMutation,
+  useGetCheckoutSessionQuery,
+  useGetPaymentStatusQuery,
+} from "@/store/features/checkout/checkoutApi";
 
 // Badge images for tiers
 const badgeBronze = "/badge-bronze.png";
@@ -87,42 +93,70 @@ const Payment = () => {
   const [searchParams] = useSearchParams();
   const { packages } = usePackages();
 
-  // State
+  // UI state
   const [step, setStep] = useState<"select-asset" | "pay">("select-asset");
-  const [isLoading, setIsLoading] = useState(false);
-  const [supportedAssets, setSupportedAssets] = useState<SupportedAsset[]>([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string>("");
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<string>("");
 
   const sessionId = searchParams.get("sessionId");
   const tier = searchParams.get("tier") || "bronze";
 
-  // Load supported assets on mount
-  useEffect(() => {
-    fetchSupportedAssets();
-  }, []);
+  // Active session ID for status polling (prefer fresh paymentData, fall back to URL param)
+  const activeSessionId = paymentData?.sessionId ?? sessionId ?? "";
 
-  // If we have a sessionId, load existing session
+  // ─── RTK Query hooks ────────────────────────────────────────────────────
+  const { data: assetsData } = useGetSupportedAssetsQuery();
+  const supportedAssets = assetsData?.supportedAssets ?? [];
+
+  const { data: existingSessionData, isLoading: isLoadingSession } =
+    useGetCheckoutSessionQuery(sessionId!, { skip: !sessionId });
+
+  const [createCheckoutSession, { isLoading: isCreating }] =
+    useCreateCheckoutSessionMutation();
+
+  const { data: paymentStatus, refetch: refetchStatus } = useGetPaymentStatusQuery(
+    activeSessionId,
+    { pollingInterval: 12000, skip: !activeSessionId || step !== "pay" },
+  );
+
+  const isLoading = isLoadingSession || isCreating;
+
+  // Sync existing session data into local state once loaded
   useEffect(() => {
-    if (sessionId) {
-      loadExistingSession(sessionId);
+    if (!existingSessionData) return;
+    const d = existingSessionData;
+    setPaymentData({
+      sessionId: d.sessionId,
+      purchaseId: d.purchaseId,
+      tier: d.tier,
+      tierName: d.tierName,
+      priceUsd: d.priceUsd,
+      amountCrypto: d.amountCrypto ?? 0,
+      btcRateUsd: d.btcRateUsd ?? 0,
+      assetId: d.assetId,
+      assetName: d.assetName,
+      depositAddress: d.depositAddress,
+      depositTag: d.depositTag,
+      expiresAt: d.expiresAt,
+      instructions: d.instructions,
+    });
+    setSelectedAssetId(d.assetId);
+    setStep("pay");
+  }, [existingSessionData]);
+
+  // Navigate on successful payment
+  useEffect(() => {
+    if (!paymentStatus) return;
+    if (paymentStatus.status === "completed") {
+      toast({ title: "Payment Confirmed!", description: "Your membership is now active." });
+      setTimeout(
+        () => navigate(`/purchase-success?tier=${paymentStatus.tier}&session_id=${activeSessionId}`),
+        2000,
+      );
     }
-  }, [sessionId]);
-
-  // Poll for status updates
-  useEffect(() => {
-    if (!paymentData?.sessionId || !paymentStatus) return;
-    if (["completed", "failed", "expired"].includes(paymentStatus.status)) return;
-
-    const interval = setInterval(() => {
-      pollStatus(paymentData.sessionId);
-    }, 12000); // every 12 seconds
-
-    return () => clearInterval(interval);
-  }, [paymentData?.sessionId, paymentStatus?.status]);
+  }, [paymentStatus, activeSessionId, navigate, toast]);
 
   // Countdown timer
   useEffect(() => {
@@ -145,75 +179,15 @@ const Payment = () => {
     return () => clearInterval(timer);
   }, [paymentData?.expiresAt, paymentStatus?.status]);
 
-  const fetchSupportedAssets = async () => {
-    try {
-      const res = await fetch("/api/checkout", { credentials: "same-origin" });
-      const data = await res.json();
-      setSupportedAssets(data.supportedAssets || []);
-    } catch {
-      console.error("Failed to fetch supported assets");
-    }
-  };
-
-  const loadExistingSession = async (sid: string) => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/checkout/fireblocks/session?sessionId=${sid}`, {
-        credentials: "same-origin",
-      });
-      if (!res.ok) throw new Error("Session not found");
-
-      const data = await res.json();
-      setPaymentData({
-        sessionId: data.sessionId,
-        purchaseId: data.purchaseId,
-        tier: data.tier,
-        tierName: data.tierName,
-        priceUsd: data.priceUsd,
-        amountCrypto: data.amountCrypto ?? 0,
-        btcRateUsd: data.btcRateUsd ?? 0,
-        assetId: data.assetId,
-        assetName: data.assetName,
-        depositAddress: data.depositAddress,
-        depositTag: data.depositTag,
-        expiresAt: data.expiresAt,
-        instructions: data.instructions,
-      });
-      setSupportedAssets(data.supportedAssets || []);
-      setSelectedAssetId(data.assetId);
-      setStep("pay");
-
-      // Fetch status
-      await pollStatus(data.sessionId);
-    } catch (error) {
-      console.error("Failed to load session:", error);
-      toast({
-        title: "Session Not Found",
-        description: "The payment session could not be loaded. Please start a new purchase.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const createSession = async () => {
     if (!selectedAssetId) {
       toast({ title: "Select a cryptocurrency", variant: "destructive" });
       return;
     }
-
-    setIsLoading(true);
     try {
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tier, assetId: selectedAssetId }),
-        credentials: "same-origin",
-      });
+      const checkoutBody = { tier, assetId: selectedAssetId };
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create payment session");
+      const data = await createCheckoutSession(checkoutBody).unwrap();
 
       setPaymentData({
         sessionId: data.sessionId,
@@ -232,51 +206,21 @@ const Payment = () => {
       });
 
       setStep("pay");
-
-      // Update URL
       navigate(`/payment?sessionId=${data.sessionId}&tier=${tier}`, { replace: true });
-
-      // Initial status
-      setPaymentStatus({
-        sessionId: data.sessionId,
-        purchaseId: data.purchaseId,
-        tier: data.tier,
-        amountUsd: data.priceUsd,
-        assetId: data.assetId,
-        depositAddress: data.depositAddress,
-        status: "pending",
-        message: "Waiting for payment. Send cryptocurrency to the deposit address.",
-        expiresAt: data.expiresAt,
-        createdAt: new Date().toISOString(),
-      });
-    } catch (error) {
-      console.error("Checkout error:", error);
+    } catch (err: unknown) {
+      console.error("Checkout error:", err);
+      let description = "Please try again";
+      if (err instanceof Error) {
+        description = err.message;
+      } else {
+        const possible = err as { data?: { error?: string } } | undefined;
+        if (possible?.data?.error) description = possible.data.error;
+      }
       toast({
         title: "Checkout Failed",
-        description: error instanceof Error ? error.message : "Please try again",
+        description,
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const pollStatus = async (sid: string) => {
-    try {
-      const res = await fetch(`/api/checkout/fireblocks/status?sessionId=${sid}`, {
-        credentials: "same-origin",
-      });
-      if (!res.ok) return;
-
-      const data = await res.json();
-      setPaymentStatus(data);
-
-      if (data.status === "completed") {
-        toast({ title: "Payment Confirmed!", description: "Your membership is now active." });
-        setTimeout(() => navigate(`/purchase-success?tier=${data.tier}&session_id=${sid}`), 2000);
-      }
-    } catch {
-      // Silent polling failure
     }
   };
 
@@ -298,6 +242,19 @@ const Payment = () => {
       setTimeout(() => setCopiedField(null), 3000);
     }
   }, [toast]);
+
+  // Manual status poll helper (used by "Check Payment Status" button)
+  const pollStatus = useCallback(
+    (sessionId?: string) => {
+      if (!sessionId) return;
+      try {
+        refetchStatus();
+      } catch (err) {
+        console.error('Error polling payment status:', err);
+      }
+    },
+    [refetchStatus]
+  );
 
   // Map raw Fireblocks status → human-readable label (matches status API)
   const FIREBLOCKS_STATUS_LABELS: Record<string, string> = {
@@ -377,6 +334,7 @@ const Payment = () => {
               <p className="text-muted-foreground mt-2">
                 Select how you want to pay
               </p>
+
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
@@ -668,6 +626,7 @@ const Payment = () => {
                       </span>
                     </div>
                   )}
+
                 </div>
               </CardContent>
             </Card>

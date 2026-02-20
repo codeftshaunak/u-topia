@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,197 +20,82 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
-import { Package, Pencil, Loader2, DollarSign } from 'lucide-react';
-import { useAdmin } from '@/hooks/useAdmin';
-
-interface PackageEntry {
-  id: string;
-  name: string;
-  price_usd: number;
-  shares: number;
-  dividend_cap_percent: number;
-  is_active: boolean;
-  updated_at: string;
-  updated_by: string | null;
-}
+import { Package as PackageIcon, Pencil, Loader2, Plus, Trash2 } from 'lucide-react';
+import { useGetPackagesQuery, useUpdatePackageMutation } from '@/store/features/packages/packagesApi';
+import type { Package, CommissionLevel } from '@/store/features/packages/packagesApi';
+import { getCommissionLevels, getTotalCommissionRate } from '@/hooks/usePackages';
 
 export function PackagesSettings() {
   const { toast } = useToast();
-  const { userEmail } = useAdmin();
-  const [packages, setPackages] = useState<PackageEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [editingPackage, setEditingPackage] = useState<PackageEntry | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  
-  // Form state
+  const { data, isLoading, refetch } = useGetPackagesQuery();
+  const [updatePackage, { isLoading: isSaving }] = useUpdatePackageMutation();
+
+  const packages = data?.packages ?? [];
+
+  const [editingPackage, setEditingPackage] = useState<Package | null>(null);
   const [formPrice, setFormPrice] = useState('');
-  const [formShares, setFormShares] = useState('');
-  const [formDividendCap, setFormDividendCap] = useState('');
   const [formIsActive, setFormIsActive] = useState(true);
+  const [formLevels, setFormLevels] = useState<CommissionLevel[]>([]);
 
-  useEffect(() => {
-    fetchPackages();
-  }, []);
-
-  const fetchPackages = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('packages')
-        .select('*')
-        .order('price_usd', { ascending: true });
-
-      if (error) throw error;
-      setPackages(data || []);
-    } catch (err) {
-      console.error('Error fetching packages:', err);
-      toast({
-        title: 'Error',
-        description: 'Failed to load packages',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const openEditModal = (pkg: PackageEntry) => {
+  const openEditModal = (pkg: Package) => {
     setEditingPackage(pkg);
-    setFormPrice(pkg.price_usd.toString());
-    setFormShares(pkg.shares.toString());
-    setFormDividendCap(pkg.dividend_cap_percent.toString());
-    setFormIsActive(pkg.is_active);
+    setFormPrice(pkg.priceUsd.toString());
+    setFormIsActive(pkg.isActive);
+    setFormLevels(getCommissionLevels(pkg).map(l => ({ ...l })));
   };
 
   const closeEditModal = () => {
     setEditingPackage(null);
     setFormPrice('');
-    setFormShares('');
-    setFormDividendCap('');
     setFormIsActive(true);
+    setFormLevels([]);
+  };
+
+  const addLevel = () => {
+    const next = formLevels.length + 1;
+    setFormLevels([...formLevels, { level: next, rate: 0 }]);
+  };
+
+  const removeLevel = (idx: number) => {
+    const updated = formLevels
+      .filter((_, i) => i !== idx)
+      .map((l, i) => ({ ...l, level: i + 1 }));
+    setFormLevels(updated);
+  };
+
+  const updateLevelRate = (idx: number, rate: number) => {
+    setFormLevels(formLevels.map((l, i) => i === idx ? { ...l, rate } : l));
   };
 
   const savePackage = async () => {
     if (!editingPackage) return;
 
     const price = parseFloat(formPrice);
-    const shares = parseInt(formShares, 10);
-    const dividendCap = parseFloat(formDividendCap);
-
-    // Validation
     if (isNaN(price) || price <= 0) {
-      toast({
-        title: 'Validation Error',
-        description: 'Price must be greater than 0',
-        variant: 'destructive',
-      });
+      toast({ title: 'Validation Error', description: 'Price must be greater than 0', variant: 'destructive' });
+      return;
+    }
+    if (formLevels.some(l => isNaN(l.rate) || l.rate < 0)) {
+      toast({ title: 'Validation Error', description: 'All commission rates must be 0 or greater', variant: 'destructive' });
       return;
     }
 
-    if (isNaN(shares) || shares <= 0) {
-      toast({
-        title: 'Validation Error',
-        description: 'Shares must be greater than 0',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (isNaN(dividendCap) || dividendCap < 0 || dividendCap > 10) {
-      toast({
-        title: 'Validation Error',
-        description: 'Dividend cap must be between 0 and 10',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setIsSaving(true);
     try {
-      // Get current values for audit log
-      const beforeData = {
-        price_usd: editingPackage.price_usd,
-        shares: editingPackage.shares,
-        dividend_cap_percent: editingPackage.dividend_cap_percent,
-        is_active: editingPackage.is_active,
-      };
+      await updatePackage({
+        id: editingPackage.id,
+        priceUsd: price,
+        isActive: formIsActive,
+        commissionLevels: formLevels.filter(l => l.rate > 0),
+      }).unwrap();
 
-      const afterData = {
-        price_usd: price,
-        shares: shares,
-        dividend_cap_percent: dividendCap,
-        is_active: formIsActive,
-      };
-
-      // Check if price changed - if so, sync with Stripe first
-      if (price !== editingPackage.price_usd) {
-        toast({
-          title: 'Syncing with Stripe...',
-          description: 'Updating payment configuration',
-        });
-
-        const { data: stripeData, error: stripeError } = await supabase.functions.invoke(
-          'sync-stripe-price',
-          {
-            body: {
-              package_id: editingPackage.id,
-              price_usd: price,
-              name: editingPackage.name,
-            },
-          }
-        );
-
-        if (stripeError || stripeData?.error) {
-          throw new Error(stripeData?.error || stripeError?.message || 'Failed to sync with Stripe');
-        }
-
-        console.log('Stripe sync successful:', stripeData);
-      }
-
-      // Update package in database
-      const { error: updateError } = await supabase
-        .from('packages')
-        .update({
-          price_usd: price,
-          shares: shares,
-          dividend_cap_percent: dividendCap,
-          is_active: formIsActive,
-          updated_by: userEmail,
-        })
-        .eq('id', editingPackage.id);
-
-      if (updateError) throw updateError;
-
-      // Log the action
-      const { error: logError } = await supabase
-        .from('admin_audit_log')
-        .insert({
-          admin_email: userEmail || 'unknown',
-          action: 'UPDATE_PACKAGE',
-          target_table: 'packages',
-          target_id: editingPackage.id,
-          before: beforeData,
-          after: afterData,
-        });
-
-      if (logError) console.error('Failed to log action:', logError);
-
-      toast({
-        title: 'Package Updated',
-        description: `${editingPackage.name} package has been updated successfully (including Stripe pricing)`,
-      });
-
+      toast({ title: 'Package Updated', description: `${editingPackage.name} updated successfully.` });
       closeEditModal();
-      fetchPackages();
-    } catch (err) {
-      console.error('Error saving package:', err);
+    } catch (err: any) {
       toast({
         title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to update package',
+        description: err?.data?.error ?? 'Failed to update package',
         variant: 'destructive',
       });
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -226,11 +111,11 @@ export function PackagesSettings() {
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/20 flex items-center justify-center">
-          <Package className="w-5 h-5 text-primary" />
+          <PackageIcon className="w-5 h-5 text-primary" />
         </div>
         <div>
           <h3 className="text-lg font-semibold text-foreground">Package Management</h3>
-          <p className="text-sm text-muted-foreground">Configure membership tiers and pricing</p>
+          <p className="text-sm text-muted-foreground">Configure membership tiers, pricing and commission levels</p>
         </div>
       </div>
 
@@ -240,56 +125,60 @@ export function PackagesSettings() {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Price (USD)</TableHead>
-              <TableHead>Shares</TableHead>
-              <TableHead>Dividend Cap %</TableHead>
+              <TableHead>Commission Levels</TableHead>
+              <TableHead>Total Rate</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-20">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {packages.map((pkg) => (
-              <TableRow key={pkg.id}>
-                <TableCell className="font-medium">{pkg.name}</TableCell>
-                <TableCell>
-                  <span className="flex items-center gap-1">
-                    <DollarSign className="w-3 h-3 text-muted-foreground" />
-                    {pkg.price_usd.toLocaleString()}
-                  </span>
-                </TableCell>
-                <TableCell>{pkg.shares.toLocaleString()}</TableCell>
-                <TableCell>{pkg.dividend_cap_percent}%</TableCell>
-                <TableCell>
-                  <Badge
-                    variant="outline"
-                    className={pkg.is_active ? 'bg-green-500/10 text-green-500 border-0' : 'bg-red-500/10 text-red-500 border-0'}
-                  >
-                    {pkg.is_active ? 'Active' : 'Inactive'}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => openEditModal(pkg)}
-                    className="hover:bg-primary/10"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
+            {packages.map((pkg) => {
+              const levels = getCommissionLevels(pkg);
+              const total = getTotalCommissionRate(pkg);
+              return (
+                <TableRow key={pkg.id}>
+                  <TableCell className="font-medium">{pkg.name}</TableCell>
+                  <TableCell>${pkg.priceUsd.toLocaleString()}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {levels.map(l => (
+                        <span key={l.level} className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono">
+                          L{l.level}: {l.rate}%
+                        </span>
+                      ))}
+                      {levels.length === 0 && <span className="text-xs text-muted-foreground">—</span>}
+                    </div>
+                  </TableCell>
+                  <TableCell className="font-medium text-primary">{total > 0 ? `${total}%` : '—'}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={pkg.isActive ? 'bg-green-500/10 text-green-500 border-0' : 'bg-red-500/10 text-red-500 border-0'}
+                    >
+                      {pkg.isActive ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Button variant="ghost" size="sm" onClick={() => openEditModal(pkg)} className="hover:bg-primary/10">
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
 
       {/* Edit Modal */}
       <Dialog open={!!editingPackage} onOpenChange={(open) => !open && closeEditModal()}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit {editingPackage?.name} Package</DialogTitle>
           </DialogHeader>
-          
-          <div className="space-y-4 py-4">
+
+          <div className="space-y-5 py-4">
+            {/* Price */}
             <div className="space-y-2">
               <Label htmlFor="price">Price (USD)</Label>
               <Input
@@ -302,57 +191,56 @@ export function PackagesSettings() {
                 placeholder="Enter price..."
               />
             </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="shares">Shares</Label>
-              <Input
-                id="shares"
-                type="number"
-                min="1"
-                step="1"
-                value={formShares}
-                onChange={(e) => setFormShares(e.target.value)}
-                placeholder="Enter shares..."
-              />
+
+            {/* Commission Levels */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>UniLevel Commission Levels</Label>
+                <Button variant="outline" size="sm" onClick={addLevel} className="gap-1 h-7 text-xs">
+                  <Plus className="w-3 h-3" /> Add Level
+                </Button>
+              </div>
+              {formLevels.length === 0 && (
+                <p className="text-sm text-muted-foreground">No commission levels configured.</p>
+              )}
+              <div className="space-y-2">
+                {formLevels.map((l, idx) => (
+                  <div key={idx} className="flex items-center gap-3">
+                    <span className="text-sm font-medium w-16 shrink-0 text-muted-foreground">Level {l.level}</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.0001"
+                      value={l.rate}
+                      onChange={(e) => updateLevelRate(idx, parseFloat(e.target.value) || 0)}
+                      className="h-8"
+                    />
+                    <span className="text-sm text-muted-foreground shrink-0">%</span>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-destructive hover:text-destructive" onClick={() => removeLevel(idx)}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              {formLevels.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Total: <span className="font-medium text-primary">{formLevels.reduce((s, l) => s + (l.rate || 0), 0).toFixed(4).replace(/\.?0+$/, '')}%</span>
+                </p>
+              )}
             </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="dividendCap">Dividend Cap Percent (0-10)</Label>
-              <Input
-                id="dividendCap"
-                type="number"
-                min="0"
-                max="10"
-                step="0.1"
-                value={formDividendCap}
-                onChange={(e) => setFormDividendCap(e.target.value)}
-                placeholder="Enter dividend cap..."
-              />
-            </div>
-            
+
+            {/* Active toggle */}
             <div className="flex items-center justify-between">
               <Label htmlFor="isActive">Active</Label>
-              <Switch
-                id="isActive"
-                checked={formIsActive}
-                onCheckedChange={setFormIsActive}
-              />
+              <Switch id="isActive" checked={formIsActive} onCheckedChange={setFormIsActive} />
             </div>
           </div>
-          
+
           <DialogFooter>
-            <Button variant="outline" onClick={closeEditModal}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={closeEditModal}>Cancel</Button>
             <Button onClick={savePackage} disabled={isSaving}>
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                'Save Changes'
-              )}
+              {isSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</> : 'Save Changes'}
             </Button>
           </DialogFooter>
         </DialogContent>

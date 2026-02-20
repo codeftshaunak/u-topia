@@ -7,34 +7,17 @@ import {
   Shield,
   Compass,
 } from "lucide-react";
-import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCheckAdminQuery } from "@/store/features/admin/adminApi";
 
 const BottomNav = () => {
   const location = useLocation();
   const { user } = useAuth();
-  const [isAdmin, setIsAdmin] = useState(false);
 
-  useEffect(() => {
-    const checkAdminStatus = async () => {
-      if (user?.email) {
-        try {
-          const response = await fetch("/api/admin/check", {
-            credentials: 'same-origin',
-          });
-          const data = await response.json();
-          setIsAdmin(data.isAdmin || false);
-        } catch (error) {
-          console.error("Error checking admin status:", error);
-          setIsAdmin(false);
-        }
-      } else {
-        setIsAdmin(false);
-      }
-    };
-
-    checkAdminStatus();
-  }, [user]);
+  const { data: adminData } = useCheckAdminQuery(undefined, {
+    skip: !user?.email,
+  });
+  const isAdmin = adminData?.isAdmin ?? false;
 
   const isActive = (path: string) => location.pathname === path;
 
