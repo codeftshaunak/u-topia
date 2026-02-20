@@ -16,6 +16,7 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
+import { useUpdatePasswordMutation } from "@/store/features/auth/authApi";
 
 type PageState = "loading" | "valid" | "invalid" | "success";
 
@@ -25,12 +26,13 @@ const ResetPassword = () => {
   const { toast } = useToast();
   const [pageState, setPageState] = useState<PageState>("valid");
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     newPassword: "",
     confirmPassword: "",
   });
+
+  const [updatePassword, { isLoading }] = useUpdatePasswordMutation();
 
   useEffect(() => {
     // Get reset token from URL
@@ -75,52 +77,24 @@ const ResetPassword = () => {
 
     if (!validateForm() || !token) return;
 
-    setIsLoading(true);
-
     try {
-      const response = await fetch("/api/auth/reset-password", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token,
-          newPassword: formData.newPassword,
-        }),
-        credentials: 'same-origin',
-      });
+      await updatePassword({ token, newPassword: formData.newPassword }).unwrap();
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        toast({
-          title: "Error",
-          description: data.error || "Failed to reset password",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Show success state
       setPageState("success");
-
       toast({
         title: "Password Updated",
         description:
           "Your password has been successfully reset. Please sign in with your new password.",
       });
 
-      // Redirect to auth page after a short delay
-      setTimeout(() => {
-        navigate("/auth");
-      }, 2000);
-    } catch (err) {
+      setTimeout(() => navigate("/auth"), 2000);
+    } catch (err: any) {
       console.error("Reset password error:", err);
       toast({
-        title: "Something Went Wrong",
-        description: "Please try again later.",
+        title: "Error",
+        description: err?.data?.error || "Failed to reset password",
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 

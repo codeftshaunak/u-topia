@@ -16,11 +16,13 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Mail, MessageSquare, Send } from "lucide-react";
+import { useSendContactMessageMutation } from "@/store/features/contact/contactApi";
 
 export default function Contact() {
   const { toast } = useToast();
   const { user } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const [sendContactMessage, { isLoading: loading }] =
+    useSendContactMessageMutation();
 
   useEffect(() => {
     // Pre-fill user's email if logged in
@@ -37,7 +39,6 @@ export default function Contact() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setLoading(true);
 
     const formData = new FormData(e.currentTarget);
     const contactData = {
@@ -48,16 +49,7 @@ export default function Contact() {
     };
 
     try {
-      const response = await fetch("/api/contact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(contactData),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to send message");
-      }
-
+      await sendContactMessage(contactData).unwrap();
       toast({
         title: "Message Sent! 📧",
         description: "We'll get back to you as soon as possible.",
@@ -66,12 +58,10 @@ export default function Contact() {
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to send message",
+        description: error?.data?.message || "Failed to send message",
         variant: "destructive",
       });
     }
-
-    setLoading(false);
   };
 
   return (

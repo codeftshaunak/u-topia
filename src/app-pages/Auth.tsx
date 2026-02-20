@@ -21,6 +21,8 @@ import {
   ArrowLeft,
   X,
 } from "lucide-react";
+import { useResetPasswordMutation } from "@/store/features/auth/authApi";
+import { useUseReferralCodeMutation } from "@/store/features/referrals/referralsApi";
 
 type AuthMode = "signin" | "signup" | "forgot";
 
@@ -53,6 +55,9 @@ const Auth = () => {
   // Track if user is actively submitting the form - prevents redirect on token refresh
   const isSubmittingRef = useRef(false);
   const emailInputRef = useRef<HTMLDivElement>(null);
+
+  const [resetPassword] = useResetPasswordMutation();
+  const [useReferralCode] = useUseReferralCodeMutation();
 
   // Load saved accounts on mount
   useEffect(() => {
@@ -155,22 +160,14 @@ const Auth = () => {
     if (!validateForm()) return;
 
     setIsLoading(true);
-
     try {
-      const response = await fetch("/api/auth/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: formData.email.trim().toLowerCase() }),
-      });
-
-      // Always show generic success message for security (don't reveal if email exists)
+      await resetPassword({ email: formData.email.trim().toLowerCase() });
+      // Always show generic success for security
       toast({
         title: "Check Your Email",
         description:
           "If an account exists for this email, we've sent a password reset link.",
       });
-
-      // Go back to sign in
       setMode("signin");
     } catch (err) {
       console.error("Forgot password error:", err);
@@ -210,41 +207,26 @@ const Auth = () => {
         // If there's a referral code, mark it as used
         if (referralCode) {
           try {
-            const response = await fetch("/api/referrals/use-code", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                code: referralCode,
-                email: formData.email.trim().toLowerCase(),
-              }),
-            });
+            const refData = await useReferralCode({
+              code: referralCode,
+              email: formData.email.trim().toLowerCase(),
+            }).unwrap();
 
-            const refData = await response.json();
-
-            if (!response.ok || !refData.success) {
-              // Check for specific error messages
-              if (refData.error?.includes("cannot refer yourself")) {
-                setReferralError("You cannot use your own referral code.");
-              } else if (
-                refData.error?.includes("Invalid or expired") ||
-                refData.error?.includes("already")
-              ) {
-                setReferralError(
-                  "This referral code has already been used or is invalid.",
-                );
-              } else if (refData.error?.includes("already been referred")) {
-                setReferralError(
-                  "This email has already been referred by another user.",
-                );
-              } else {
-                setReferralError(
-                  refData.error || "Failed to process referral code.",
-                );
-              }
+            if (!refData.success) {
+              setReferralError("Failed to process referral code.");
             }
-          } catch (refError) {
+          } catch (refError: any) {
             console.error("Error processing referral:", refError);
-            setReferralError("Failed to process referral code.");
+            const msg = refError?.data?.error || "";
+            if (msg.includes("cannot refer yourself")) {
+              setReferralError("You cannot use your own referral code.");
+            } else if (msg.includes("Invalid or expired") || msg.includes("already")) {
+              setReferralError("This referral code has already been used or is invalid.");
+            } else if (msg.includes("already been referred")) {
+              setReferralError("This email has already been referred by another user.");
+            } else {
+              setReferralError(msg || "Failed to process referral code.");
+            }
           }
         }
 

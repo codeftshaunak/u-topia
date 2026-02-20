@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,34 +12,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useCheckAdminQuery } from "@/store/features/admin/adminApi";
 
 const Header = () => {
   const { user, signOut } = useAuth();
-  const [isAdmin, setIsAdmin] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const checkAdminStatus = async () => {
-      if (user?.email) {
-        try {
-          const response = await fetch("/api/admin/check", {
-            credentials: 'same-origin',
-          });
-          const data = await response.json();
-          setIsAdmin(data.isAdmin || false);
-        } catch (error) {
-          console.error("Error checking admin status:", error);
-          setIsAdmin(false);
-        }
-      } else {
-        setIsAdmin(false);
-      }
-    };
-
-    checkAdminStatus();
-  }, [user]);
+  const { data: adminData } = useCheckAdminQuery(undefined, {
+    skip: !user?.email,
+  });
+  const isAdmin = adminData?.isAdmin ?? false;
 
   const handleSignOut = async () => {
     try {

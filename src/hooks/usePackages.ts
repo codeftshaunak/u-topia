@@ -1,136 +1,36 @@
-import { useState, useEffect } from "react";
+/**
+ * usePackages – RTK Query backed hook.
+ * Drop-in replacement for the previous useState/useEffect version.
+ * Falls back to DEFAULT_PACKAGES when the API returns nothing.
+ */
+import { useMemo } from "react";
+import { useGetPackagesQuery } from "@/store/features/packages/packagesApi";
+import {
+  DEFAULT_PACKAGES,
+  PACKAGE_ORDER,
+  REFERRAL_CAPACITY,
+  COMMISSION_DEPTH,
+} from "@/store/features/packages/packagesApi";
 
-export interface Package {
-  id: string;
-  name: string;
-  priceUsd: number;
-  shares: number;
-  dividendCapPercent: number;
-  isActive: boolean;
-}
+export type { Package, PackageKey } from "@/store/features/packages/packagesApi";
+import type { Package, PackageKey } from "@/store/features/packages/packagesApi";
 
-export type PackageKey = "bronze" | "silver" | "gold" | "platinum" | "diamond";
-
-const packageOrder: PackageKey[] = [
-  "bronze",
-  "silver",
-  "gold",
-  "platinum",
-  "diamond",
-];
-
-// Fallback packages used if the backend returns no rows (e.g. during RLS/config transitions).
-// This prevents the UI from appearing "broken" while keeping dynamic package updates when available.
-const DEFAULT_PACKAGES: Package[] = [
-  {
-    id: "default-bronze",
-    name: "Bronze",
-    priceUsd: 1,
-    shares: 100,
-    dividendCapPercent: 2,
-    isActive: true,
-  },
-  {
-    id: "default-silver",
-    name: "Silver",
-    priceUsd: 2,
-    shares: 300,
-    dividendCapPercent: 3,
-    isActive: true,
-  },
-  {
-    id: "default-gold",
-    name: "Gold",
-    priceUsd: 3,
-    shares: 750,
-    dividendCapPercent: 4,
-    isActive: true,
-  },
-  {
-    id: "default-platinum",
-    name: "Platinum",
-    priceUsd: 4,
-    shares: 1800,
-    dividendCapPercent: 5,
-    isActive: true,
-  },
-  {
-    id: "default-diamond",
-    name: "Diamond",
-    priceUsd: 5,
-    shares: 5000,
-    dividendCapPercent: 6,
-    isActive: true,
-  },
-];
-
-// Mapping for referral capacity based on tier
-const referralCapacity: Record<PackageKey, number> = {
-  bronze: 3,
-  silver: 9,
-  gold: 27,
-  platinum: 81,
-  diamond: 243,
-};
-
-// Commission depth is same as tier level (1-5)
-const commissionDepth: Record<PackageKey, number> = {
-  bronze: 1,
-  silver: 2,
-  gold: 3,
-  platinum: 4,
-  diamond: 5,
-};
+// Re-export constants for components that import them from this hook file
+export { PACKAGE_ORDER as packageOrder, DEFAULT_PACKAGES };
 
 export function usePackages() {
-  const [packages, setPackages] = useState<Package[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const { data, isLoading, error } = useGetPackagesQuery();
 
-  const fetchPackages = async () => {
-    try {
-      const response = await fetch("/api/packages", {
-        method: "GET",
-        credentials: "include",
-      });
+  const packages: Package[] = useMemo(() => {
+    const pkgs = data?.packages ?? [];
+    return pkgs.length > 0 ? pkgs : DEFAULT_PACKAGES;
+  }, [data]);
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch packages");
-      }
-
-      const data = await response.json();
-
-      // If backend returns nothing, fall back so the marketing UI never looks empty.
-      if (!data.packages || data.packages.length === 0) {
-        setPackages(DEFAULT_PACKAGES);
-      } else {
-        setPackages(data.packages);
-      }
-    } catch (err) {
-      console.error("Error fetching packages:", err);
-      setError(
-        err instanceof Error ? err : new Error("Failed to fetch packages"),
-      );
-
-      // On error, still show fallback packages for a functional UI.
-      setPackages(DEFAULT_PACKAGES);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchPackages();
-  }, []);
-
-  const getPackageByName = (name: string): Package | undefined => {
-    return packages.find((p) => p.name.toLowerCase() === name.toLowerCase());
-  };
+  const getPackageByName = (name: string): Package | undefined =>
+    packages.find((p) => p.name.toLowerCase() === name.toLowerCase());
 
   const formatPrice = (price: number | undefined): string => {
-    if (price === undefined || price === null) {
-      return "$0";
-    }
+    if (price === undefined || price === null) return "$0";
     return `$${price.toLocaleString()}`;
   };
 
@@ -138,8 +38,8 @@ export function usePackages() {
     const key = pkg.name.toLowerCase() as PackageKey;
     return [
       `${pkg.shares.toLocaleString()} Share Allocation`,
-      `Maximum Referral Capacity: ${referralCapacity[key] || 3}`,
-      `Commission Depth: ${commissionDepth[key] || 1} layer${commissionDepth[key] > 1 ? "s" : ""}`,
+      `Maximum Referral Capacity: ${REFERRAL_CAPACITY[key] || 3}`,
+      `Commission Depth: ${COMMISSION_DEPTH[key] || 1} layer${COMMISSION_DEPTH[key] > 1 ? "s" : ""}`,
       `Dividend Cap: ${pkg.dividendCapPercent}%`,
       `Maximum Reward Rate: Up to ${pkg.dividendCapPercent}%`,
     ];
@@ -154,22 +54,21 @@ export function usePackages() {
       platinum: "Higher passive rewards",
       diamond: "Top-tier dividends",
     };
-
     return [
       `${pkg.shares.toLocaleString()} Shares`,
-      `${referralCapacity[key] || 3} Referrals`,
+      `${REFERRAL_CAPACITY[key] || 3} Referrals`,
       highlightTexts[key] || "Passive income",
     ];
   };
 
   return {
     packages,
-    isLoading,
-    error,
+    isLoading: isLoading && !data,
+    error: error ? new Error("Failed to fetch packages") : null,
     getPackageByName,
     formatPrice,
     getPackageFeatures,
     getPackageHighlights,
-    packageOrder,
+    packageOrder: PACKAGE_ORDER,
   };
 }

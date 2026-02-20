@@ -1,5 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+/**
+ * useCommissions – RTK Query backed hook.
+ * Derives the commission summary from the raw ledger returned by /api/commissions
+ * and composes extra context from /api/referrals and /api/profile via RTK Query.
+ */
+import { useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useGetCommissionsQuery } from "@/store/features/commissions/commissionsApi";
+import { useGetReferralsQuery } from "@/store/features/referrals/referralsApi";
+import { useGetProfileQuery } from "@/store/features/profile/profileApi";
 
 export interface CommissionSummary {
   total_earned: number;
@@ -42,53 +50,7 @@ interface UseCommissionsResult {
   refetch: () => Promise<void>;
 }
 
-async function fetchCommissionData() {
-  // Fetch commissions from custom API
-  const commissionsResponse = await fetch("/api/commissions", {
-    method: "GET",
-    credentials: "include",
-  });
-
-  if (!commissionsResponse.ok) {
-    return null;
-  }
-
-  const { commissions } = await commissionsResponse.json();
-
-  // Fetch referrals stats from custom API
-  const referralsResponse = await fetch("/api/referrals", {
-    method: "GET",
-    credentials: "include",
-  });
-
-  let activeReferrals = 0;
-  let affiliateStatus: AffiliateStatus | null = null;
-
-  if (referralsResponse.ok) {
-    const referralsData = await referralsResponse.json();
-    activeReferrals = referralsData.stats?.activeReferrals || 0;
-  }
-
-  // Fetch profile to get affiliate status
-  const profileResponse = await fetch("/api/profile", {
-    method: "GET",
-    credentials: "include",
-  });
-
-  if (profileResponse.ok) {
-    const profileData = await profileResponse.json();
-    if (profileData.affiliateStatus) {
-      affiliateStatus = {
-        user_id: profileData.affiliateStatus.userId,
-        tier: profileData.affiliateStatus.tier,
-        tier_depth_limit: profileData.affiliateStatus.tierDepthLimit,
-        is_active: profileData.affiliateStatus.isActive,
-        updated_at: profileData.affiliateStatus.updatedAt,
-      };
-    }
-  }
-
-  // Calculate summary from commissions
+function buildSummary(commissions: CommissionEntry[]): CommissionSummary {
   const summary: CommissionSummary = {
     total_earned: 0,
     pending: 0,
@@ -99,7 +61,7 @@ async function fetchCommissionData() {
     by_layer: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
   };
 
-  for (const comm of commissions || []) {
+  for (const comm of commissions) {
     const amount = Number(comm.amountUsd);
     if (comm.status === "pending") {
       summary.pending += amount;
@@ -121,34 +83,61 @@ async function fetchCommissionData() {
     }
   }
 
+  return summary;
+}
+
+export function useCommissions(): UseCommissionsResult {
+  const { user } = useAuth();
+
+  const {
+    data: commissionsData,
+    isLoading: commissionsLoading,
+    error: commissionsError,
+    refetch: refetchCommissions,
+  } = useGetCommissionsQuery(undefined, { skip: !user });
+
+  const { data: referralsData, refetch: refetchReferrals } =
+    useGetReferralsQuery(undefined, { skip: !user });
+
+  const { data: profileData, refetch: refetchProfile } =
+    useGetProfileQuery(undefined, { skip: !user });
+
+  const summary = useMemo<CommissionSummary | null>(() => {
+    if (!commissionsData) return null;
+    return buildSummary(commissionsData.commissions ?? []);
+  }, [commissionsData]);
+
+  const affiliateStatus = useMemo<AffiliateStatus | null>(() => {
+    const as = profileData?.affiliateStatus;
+    if (!as) return null;
+    return {
+      user_id: as.userId,
+      tier: as.tier,
+      tier_depth_limit: as.tierDepthLimit,
+      is_active: as.isActive,
+      updated_at: as.updatedAt,
+    };
+  }, [profileData]);
+
+  const activeReferrals = referralsData?.stats?.activeReferrals ?? 0;
+
+  const recentCommissions = useMemo(
+    () => (commissionsData?.commissions ?? []).slice(0, 10),
+    [commissionsData]
+  );
+
+  const refetch = async () => {
+    await Promise.all([refetchCommissions(), refetchReferrals(), refetchProfile()]);
+  };
+
   return {
     summary,
     affiliateStatus,
     activeReferrals,
-    recentCommissions: (commissions || []).slice(0, 10) as CommissionEntry[],
-  };
-}
-
-export function useCommissions(): UseCommissionsResult {
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["commissions"],
-    queryFn: fetchCommissionData,
-    staleTime: 1000 * 60 * 5, // 5 minutes - data stays fresh
-    gcTime: 1000 * 60 * 30, // 30 minutes - keep in cache
-    refetchOnWindowFocus: false,
-    retry: 1,
-  });
-
-  return {
-    summary: data?.summary || null,
-    affiliateStatus: data?.affiliateStatus || null,
-    activeReferrals: data?.activeReferrals || 0,
-    recentCommissions: data?.recentCommissions || [],
-    isLoading,
-    error: error ? "Failed to fetch commission data" : null,
-    refetch: async () => {
-      await refetch();
-    },
+    recentCommissions,
+    isLoading: commissionsLoading && !commissionsData,
+    error: commissionsError ? "Failed to fetch commission data" : null,
+    refetch,
   };
 }
 

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { usePackages, PackageKey } from "@/hooks/usePackages";
 import { useAuth } from "@/contexts/AuthContext";
+import { useGetSupportedAssetsQuery, useCreateCheckoutSessionMutation } from "@/store/features/checkout/checkoutApi";
 import {
   Accordion,
   AccordionContent,
@@ -40,11 +41,7 @@ const DashboardPurchase = () => {
   const [searchParams] = useSearchParams();
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [showAssetDialog, setShowAssetDialog] = useState(false);
-  const [supportedAssets, setSupportedAssets] = useState<
-    { id: string; name: string; symbol: string }[]
-  >([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string>("");
-  const [isLoadingAssets, setIsLoadingAssets] = useState(false);
   const {
     packages,
     isLoading,
@@ -59,10 +56,16 @@ const DashboardPurchase = () => {
     packageOrder.includes(initialPackage) ? initialPackage : "bronze",
   );
 
-  // Fetch supported assets on mount
+  const { data: assetsData, isLoading: isLoadingAssets } = useGetSupportedAssetsQuery();
+  const supportedAssets = assetsData?.supportedAssets ?? [];
+  const [createCheckoutSession] = useCreateCheckoutSessionMutation();
+
+  // Select first asset when assets load
   useEffect(() => {
-    fetchSupportedAssets();
-  }, []);
+    if (!selectedAssetId && supportedAssets.length > 0) {
+      setSelectedAssetId(supportedAssets[0].id);
+    }
+  }, [supportedAssets, selectedAssetId]);
 
   useEffect(() => {
     const tier = searchParams.get("tier") as PackageKey;
@@ -70,27 +73,6 @@ const DashboardPurchase = () => {
       setSelectedPackage(tier);
     }
   }, [searchParams]);
-
-  const fetchSupportedAssets = async () => {
-    try {
-      setIsLoadingAssets(true);
-      const res = await fetch("/api/checkout", { credentials: "same-origin" });
-      const data = await res.json();
-      setSupportedAssets(data.supportedAssets || []);
-      if (data.supportedAssets && data.supportedAssets.length > 0) {
-        setSelectedAssetId(data.supportedAssets[0].id);
-      }
-    } catch (error) {
-      console.error("Failed to fetch supported assets:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load payment methods",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoadingAssets(false);
-    }
-  };
 
   const currentPackage = packages.find(
     (p) => p.name.toLowerCase() === selectedPackage,
@@ -117,36 +99,24 @@ const DashboardPurchase = () => {
         localStorage.getItem("package_referral_code") ||
         undefined;
 
-      const response = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tier: selectedPackage,
-          assetId: selectedAssetId,
-          referralCode,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to initiate checkout");
-      }
+      const data = await createCheckoutSession({
+        tier: selectedPackage,
+        assetId: selectedAssetId,
+        referralCode,
+      }).unwrap();
 
       if (data?.sessionId) {
         setShowAssetDialog(false);
-        navigate(
-          `/payment?sessionId=${data.sessionId}&tier=${selectedPackage}`
-        );
+        navigate(`/payment?sessionId=${data.sessionId}&tier=${selectedPackage}`);
       } else {
         throw new Error("No session ID received");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Checkout error:", error);
       toast({
         title: "Checkout Error",
         description:
-          error instanceof Error ? error.message : "Failed to start checkout. Please try again.",
+          error?.data?.error ?? (error instanceof Error ? error.message : "Failed to start checkout. Please try again."),
         variant: "destructive",
       });
     } finally {

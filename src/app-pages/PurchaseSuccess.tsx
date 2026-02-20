@@ -5,6 +5,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Loader2, Mail } from "lucide-react";
 const logoLight = "/u-topia-logo-light.png";
+import { useVerifyPurchaseMutation } from "@/store/features/purchase/purchaseApi";
 
 const PurchaseSuccess = () => {
   const [searchParams] = useSearchParams();
@@ -17,39 +18,28 @@ const PurchaseSuccess = () => {
   const [emailSent, setEmailSent] = useState(false);
 
   const tierName = tier.charAt(0).toUpperCase() + tier.slice(1);
+  const [verifyPurchase] = useVerifyPurchaseMutation();
 
   useEffect(() => {
-    const verifyPurchase = async () => {
+    const run = async () => {
       const id = paymentId || sessionId;
       if (!id) {
         setVerifying(false);
-        setVerified(true); // Assume success if no ID (direct navigation)
+        setVerified(true);
         return;
       }
-
       try {
-        const response = await fetch("/api/verify-purchase", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ paymentId: id, tier }),
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          console.error("Verification error:", data);
-        } else {
-          setVerified(data?.verified || false);
-          setEmailSent(data?.emailSent || false);
-        }
+        const data = await verifyPurchase({ paymentId: id, tier }).unwrap();
+        setVerified(data?.verified ?? false);
+        setEmailSent(data?.emailSent ?? false);
       } catch (err) {
         console.error("Failed to verify purchase:", err);
       } finally {
         setVerifying(false);
       }
     };
-
-    verifyPurchase();
+    run();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentId, sessionId, tier]);
 
   return (

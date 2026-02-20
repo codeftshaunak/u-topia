@@ -1,72 +1,26 @@
-import { useState, useEffect, useCallback } from "react";
+/**
+ * usePackageReferrals – RTK Query backed hook.
+ * Drop-in replacement for the previous useState/useEffect version.
+ */
 import { useAuth } from "@/contexts/AuthContext";
+import { useGetPackageReferralsQuery } from "@/store/features/referrals/referralsApi";
 
-interface ReferredUser {
-  id: string;
-  buyerUserId: string;
-  buyerName: string | null;
-  buyerEmail: string;
-  buyerAvatar: string | null;
-  tier: string;
-  purchaseAmountUsd: number;
-  rewardPercent: number;
-  rewardAmountUsd: number;
-  rewardStatus: string;
-  purchaseDate: string;
-}
-
-interface PackageReferralStats {
-  totalReferredPurchases: number;
-  totalRewardsEarned: number;
-  pendingRewards: number;
-  approvedRewards: number;
-  paidRewards: number;
-  tierBreakdown: { tier: string; count: number }[];
-}
+export type { ReferredUser, PackageReferralStats } from "@/store/features/referrals/referralsApi";
+import type { ReferredUser, PackageReferralStats } from "@/store/features/referrals/referralsApi";
 
 export function usePackageReferrals() {
   const { user } = useAuth();
-  const [referredUsers, setReferredUsers] = useState<ReferredUser[]>([]);
-  const [stats, setStats] = useState<PackageReferralStats | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const fetchReferrals = useCallback(async () => {
-    if (!user) {
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      setError(null);
-      const response = await fetch("/api/referrals/package-rewards", {
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch package referrals");
-      }
-
-      const data = await response.json();
-      setReferredUsers(data.referredUsers || []);
-      setStats(data.stats || null);
-    } catch (err) {
-      console.error("Error fetching package referrals:", err);
-      setError(err instanceof Error ? err.message : "Failed to load referrals");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    fetchReferrals();
-  }, [fetchReferrals]);
+  const { data, isLoading, error, refetch } = useGetPackageReferralsQuery(
+    undefined,
+    { skip: !user }
+  );
 
   return {
-    referredUsers,
-    stats,
-    isLoading,
-    error,
-    refetch: fetchReferrals,
+    referredUsers: data?.referredUsers ?? [],
+    stats: data?.stats ?? null,
+    isLoading: isLoading && !data,
+    error: error ? "Failed to load referrals" : null,
+    refetch: () => { refetch(); },
   };
 }
