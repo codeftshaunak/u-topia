@@ -38,6 +38,7 @@ export interface ReferralsResponse {
 
 export interface ReferralLinkResponse {
   code: string;
+  hasPackage?: boolean;
 }
 
 export interface ReferredUser {

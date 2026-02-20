@@ -45,10 +45,6 @@ export function useReferrals() {
 
 // Map referral status to display status
 export function getDisplayStatus(referral: ReferralData): string {
-  // Package purchase referrals are always commissionable
-  if (referral.referralType === "package") {
-    return "Commissionable";
-  }
   if (referral.status === "active" && referral.packagePurchased) {
     return "Commissionable";
   }
@@ -56,7 +52,7 @@ export function getDisplayStatus(referral: ReferralData): string {
     return "Signed Up";
   }
   if (referral.status === "pending") {
-    return "Pending Activation";
+    return "Signed Up";
   }
   if (referral.status === "invalid") {
     return "Reversed";

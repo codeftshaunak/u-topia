@@ -36,6 +36,7 @@ const Purchase = () => {
   const {
     packages,
     isLoading,
+    isFetching,
     formatPrice,
     getPackageFeatures,
     getPackageHighlights,
@@ -47,23 +48,12 @@ const Purchase = () => {
     packageOrder.includes(initialPackage) ? initialPackage : "bronze",
   );
 
-  // Capture referral code from URL and persist to localStorage
-  const refCode = searchParams.get("ref");
-  useEffect(() => {
-    if (refCode) {
-      localStorage.setItem("package_referral_code", refCode);
-    }
-  }, [refCode]);
-
-  // Get stored referral code (from URL or localStorage)
-  const storedRefCode = refCode || (typeof window !== "undefined" ? localStorage.getItem("package_referral_code") : null);
-
   useEffect(() => {
     const tier = searchParams.get("tier") as PackageKey;
     if (tier && packageOrder.includes(tier)) {
       setSelectedPackage(tier);
     }
-  }, [searchParams]);
+  }, [searchParams, packageOrder]);
 
   const currentPackage = packages.find(
     (p) => p.name.toLowerCase() === selectedPackage,
@@ -80,15 +70,12 @@ const Purchase = () => {
         description: "Please sign in to purchase a package.",
         variant: "destructive",
       });
-      // Preserve referral code through auth flow
-      const refParam = storedRefCode ? `&ref=${storedRefCode}` : "";
-      window.location.href = `/auth?redirect=/purchase?tier=${selectedPackage}${refParam}`;
+      window.location.href = `/auth?redirect=/purchase?tier=${selectedPackage}`;
       return;
     }
 
     // Navigate to payment page where user selects crypto and gets a unique deposit address
-    const refParam = storedRefCode ? `&ref=${storedRefCode}` : "";
-    window.location.href = `/payment?tier=${selectedPackage}${refParam}`;
+    window.location.href = `/payment?tier=${selectedPackage}`;
   };
 
   if (isLoading) {
@@ -121,19 +108,14 @@ const Purchase = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-
-      {/* Referral Code Banner */}
-      {storedRefCode && (
-        <div className="bg-primary/10 border-b border-primary/20">
-          <div className="container mx-auto px-6 py-3 flex items-center justify-center gap-2 text-sm">
-            <span className="text-primary font-medium">Referred by code:</span>
-            <span className="font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
-              {storedRefCode}
-            </span>
-            <span className="text-muted-foreground">— Your referrer will be rewarded when you purchase!</span>
-          </div>
+      {/* Live DB refresh indicator */}
+      {isFetching && !isLoading && (
+        <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground animate-pulse py-2">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          <span>Refreshing package data…</span>
         </div>
       )}
+
 
       {/* Main Product Detail Section */}
       <section className="container mx-auto px-6 py-12 md:py-20">

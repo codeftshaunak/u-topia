@@ -102,8 +102,6 @@ const Payment = () => {
 
   const sessionId = searchParams.get("sessionId");
   const tier = searchParams.get("tier") || "bronze";
-  const refCodeParam = searchParams.get("ref");
-  const referralCode = refCodeParam || (typeof window !== "undefined" ? localStorage.getItem("package_referral_code") : null);
 
   // Active session ID for status polling (prefer fresh paymentData, fall back to URL param)
   const activeSessionId = paymentData?.sessionId ?? sessionId ?? "";
@@ -152,7 +150,6 @@ const Payment = () => {
   useEffect(() => {
     if (!paymentStatus) return;
     if (paymentStatus.status === "completed") {
-      localStorage.removeItem("package_referral_code");
       toast({ title: "Payment Confirmed!", description: "Your membership is now active." });
       setTimeout(
         () => navigate(`/purchase-success?tier=${paymentStatus.tier}&session_id=${activeSessionId}`),
@@ -188,7 +185,7 @@ const Payment = () => {
       return;
     }
     try {
-      const checkoutBody = { tier, assetId: selectedAssetId, ...(referralCode && { referralCode }) };
+      const checkoutBody = { tier, assetId: selectedAssetId };
 
       const data = await createCheckoutSession(checkoutBody).unwrap();
 
@@ -337,12 +334,7 @@ const Payment = () => {
               <p className="text-muted-foreground mt-2">
                 Select how you want to pay
               </p>
-              {referralCode && (
-                <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">
-                  <span className="text-xs text-muted-foreground">Referral Code:</span>
-                  <span className="text-xs font-mono font-bold text-primary">{referralCode}</span>
-                </div>
-              )}
+
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
@@ -634,14 +626,7 @@ const Payment = () => {
                       </span>
                     </div>
                   )}
-                  {referralCode && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">Referral Code</span>
-                      <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
-                        {referralCode}
-                      </span>
-                    </div>
-                  )}
+
                 </div>
               </CardContent>
             </Card>

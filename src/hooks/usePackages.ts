@@ -1,25 +1,28 @@
 /**
  * usePackages – RTK Query backed hook.
- * Drop-in replacement for the previous useState/useEffect version.
- * Falls back to DEFAULT_PACKAGES when the API returns nothing.
+ * All commission info comes directly from DB (pkg.commissionLevels).
+ * No static COMMISSION_DEPTH / COMMISSION_LAYER_RATES constants.
  */
 import { useMemo } from "react";
 import { useGetPackagesQuery } from "@/store/features/packages/packagesApi";
 import {
   DEFAULT_PACKAGES,
   PACKAGE_ORDER,
-  REFERRAL_CAPACITY,
-  COMMISSION_DEPTH,
+  getCommissionLevels,
+  getTotalCommissionRate,
 } from "@/store/features/packages/packagesApi";
 
-export type { Package, PackageKey } from "@/store/features/packages/packagesApi";
+export type { Package, PackageKey, CommissionLevel } from "@/store/features/packages/packagesApi";
 import type { Package, PackageKey } from "@/store/features/packages/packagesApi";
 
-// Re-export constants for components that import them from this hook file
-export { PACKAGE_ORDER as packageOrder, DEFAULT_PACKAGES };
+// Re-export for consumers
+export { PACKAGE_ORDER as packageOrder, DEFAULT_PACKAGES, getCommissionLevels, getTotalCommissionRate };
 
 export function usePackages() {
-  const { data, isLoading, error } = useGetPackagesQuery();
+  const { data, isLoading, isFetching, error } = useGetPackagesQuery(undefined, {
+    // Always re-fetch from DB when the component mounts
+    refetchOnMountOrArgChange: true,
+  });
 
   const packages: Package[] = useMemo(() => {
     const pkgs = data?.packages ?? [];
@@ -35,13 +38,14 @@ export function usePackages() {
   };
 
   const getPackageFeatures = (pkg: Package): string[] => {
-    const key = pkg.name.toLowerCase() as PackageKey;
+    const levels = getCommissionLevels(pkg);
+    const depth = levels.length;
+    const total = getTotalCommissionRate(pkg);
     return [
-      `${pkg.shares.toLocaleString()} Share Allocation`,
-      `Maximum Referral Capacity: ${REFERRAL_CAPACITY[key] || 3}`,
-      `Commission Depth: ${COMMISSION_DEPTH[key] || 1} layer${COMMISSION_DEPTH[key] > 1 ? "s" : ""}`,
-      `Dividend Cap: ${pkg.dividendCapPercent}%`,
-      `Maximum Reward Rate: Up to ${pkg.dividendCapPercent}%`,
+      `Unlimited Referrals`,
+      `Commission Depth: ${depth} level${depth !== 1 ? "s" : ""}`,
+      `Maximum Commission: Up to ${total.toFixed(depth > 0 ? (total % 1 === 0 ? 0 : 4) : 0)}%`,
+      ...levels.map(l => `Level ${l.level}: ${l.rate}%`),
     ];
   };
 
@@ -49,14 +53,15 @@ export function usePackages() {
     const key = pkg.name.toLowerCase() as PackageKey;
     const highlightTexts: Record<PackageKey, string> = {
       bronze: "Entry-level passive income",
-      silver: "Mid-tier dividends",
-      gold: "LP growth eligible",
-      platinum: "Higher passive rewards",
-      diamond: "Top-tier dividends",
+      silver: "Mid-tier commissions",
+      gold: "3-level commission depth",
+      platinum: "4-level commission depth",
+      diamond: "6-level commission depth",
     };
+    const levels = getCommissionLevels(pkg);
     return [
-      `${pkg.shares.toLocaleString()} Shares`,
-      `${REFERRAL_CAPACITY[key] || 3} Referrals`,
+      `${levels.length} Commission Level${levels.length !== 1 ? "s" : ""}`,
+      `Unlimited Referrals`,
       highlightTexts[key] || "Passive income",
     ];
   };
@@ -64,6 +69,7 @@ export function usePackages() {
   return {
     packages,
     isLoading: isLoading && !data,
+    isFetching,
     error: error ? new Error("Failed to fetch packages") : null,
     getPackageByName,
     formatPrice,

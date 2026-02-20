@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +13,7 @@ import {
   CheckCircle,
   Loader2,
   ShoppingBag,
+  Lock,
 } from "lucide-react";
 
 export function ReferralToolsCard() {
@@ -20,34 +22,25 @@ export function ReferralToolsCard() {
   const {
     referralLink,
     fullReferralUrl,
-    fullPurchaseReferralUrl,
+    hasPackage,
     isLoading,
     isRefreshing,
     regenerateLink,
   } = useReferralLink();
   const [copied, setCopied] = useState(false);
-  const [copiedPurchase, setCopiedPurchase] = useState(false);
-  const [linkMode, setLinkMode] = useState<"signup" | "purchase">("purchase");
 
-  const activeUrl = linkMode === "purchase" ? fullPurchaseReferralUrl : fullReferralUrl;
+  const activeUrl = fullReferralUrl;
 
   const handleCopyLink = async () => {
     if (!activeUrl) return;
 
     try {
       await navigator.clipboard.writeText(activeUrl);
-      if (linkMode === "purchase") {
-        setCopiedPurchase(true);
-        setTimeout(() => setCopiedPurchase(false), 2000);
-      } else {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
       toast({
         title: "Link Copied",
-        description: linkMode === "purchase"
-          ? "Package referral link copied to clipboard."
-          : "Referral link copied to clipboard.",
+        description: "Referral link copied to clipboard.",
       });
     } catch {
       toast({
@@ -61,9 +54,7 @@ export function ReferralToolsCard() {
   const handleShare = (platform: string) => {
     if (!activeUrl) return;
 
-    const message = linkMode === "purchase"
-      ? encodeURIComponent("Check out this U-topia package! Purchase using my referral link: " + activeUrl)
-      : encodeURIComponent("Join U-topia using my referral link: " + activeUrl);
+    const message = encodeURIComponent("Join U-topia using my referral link: " + activeUrl);
     let url = "";
 
     switch (platform) {
@@ -108,6 +99,28 @@ export function ReferralToolsCard() {
     );
   }
 
+  // No package — must purchase before sharing referral link
+  if (hasPackage === false) {
+    return (
+      <div className="feature-card p-8 md:p-10">
+        <div className="text-center py-8">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+            <Lock className="w-8 h-8 text-amber-500" />
+          </div>
+          <h3 className="text-lg font-semibold text-foreground mb-2">
+            Package Required
+          </h3>
+          <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
+            You need to purchase a package before you can share your referral link and earn commissions.
+          </p>
+          <Button asChild>
+            <Link href="/purchase">Purchase a Package</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="feature-card p-8 md:p-10">
       {/* Status Indicator */}
@@ -130,37 +143,13 @@ export function ReferralToolsCard() {
         </div>
       </div>
 
-      {/* Link Mode Toggle */}
-      {/* <div className="flex gap-2 mb-6">
-        <button
-          onClick={() => setLinkMode("purchase")}
-          className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-            linkMode === "purchase"
-              ? "bg-primary text-white shadow-md"
-              : "bg-secondary/50 text-muted-foreground border border-border hover:bg-secondary"
-          }`}
-        >
-          <ShoppingBag className="w-4 h-4" />
-          Package Referral
-        </button>
-        <button
-          onClick={() => setLinkMode("signup")}
-          className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-            linkMode === "signup"
-              ? "bg-primary text-white shadow-md"
-              : "bg-secondary/50 text-muted-foreground border border-border hover:bg-secondary"
-          }`}
-        >
-          <Copy className="w-4 h-4" />
-          Signup Referral
-        </button>
-      </div> */}
+      {/* Link Mode Toggle - removed, only signup referral links now */}
 
       <div className="grid md:grid-cols-2 gap-8">
         {/* Referral Link Section */}
         <div>
           <label className="text-sm font-medium text-foreground mb-3 block">
-            {linkMode === "purchase" ? "Package Referral Link" : "Signup Referral Link"}
+            Your Referral Link
           </label>
           <div className="flex items-center gap-3 mb-4">
             <div className="flex-1 bg-secondary/50 border border-border rounded-xl px-4 py-3 font-mono text-sm text-muted-foreground overflow-x-auto">
@@ -173,7 +162,7 @@ export function ReferralToolsCard() {
               disabled={!activeUrl || isRefreshing}
               className="flex-shrink-0 h-12 w-12 rounded-xl border-border hover:border-primary/50 hover:bg-primary/5"
             >
-              {(linkMode === "purchase" ? copiedPurchase : copied) ? (
+              {copied ? (
                 <CheckCircle className="w-5 h-5 text-emerald-500" />
               ) : (
                 <Copy className="w-5 h-5" />
@@ -181,11 +170,9 @@ export function ReferralToolsCard() {
             </Button>
           </div>
 
-          {linkMode === "purchase" && (
-            <p className="text-xs text-primary/80 bg-primary/5 border border-primary/10 rounded-lg px-3 py-2 mb-4">
-              Share this link to earn rewards when someone purchases a package through it.
-            </p>
-          )}
+          <p className="text-xs text-primary/80 bg-primary/5 border border-primary/10 rounded-lg px-3 py-2 mb-4">
+            Share this link to invite new users. When they sign up and purchase a package, you earn commissions up through your commission depth.
+          </p>
 
           {/* Share Buttons */}
           <div className="mb-4">
@@ -260,9 +247,7 @@ export function ReferralToolsCard() {
             )}
           </div>
           <p className="text-xs text-muted-foreground/70 mt-3 max-w-[200px]">
-            {linkMode === "purchase"
-              ? "Share this QR code so others can scan and purchase a package using your referral."
-              : "Each referral link and QR code can be used once for security and accurate tracking."}
+            Share this QR code so others can scan and sign up using your referral link.
           </p>
         </div>
       </div>

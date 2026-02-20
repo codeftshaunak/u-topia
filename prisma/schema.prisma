@@ -46,17 +46,20 @@ enum PaymentProvider {
 
 // Models
 model User {
-  id                String         @id @default(cuid())
-  email             String         @unique
-  password          String
-  emailVerified     DateTime?
-  fireblocksVaultId String?        @unique // One-vault-per-user architecture
-  currentPackage    AffiliateTier? // Current active package
-  packageActivatedAt DateTime?     // When the current package was activated
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  id                 String         @id @default(cuid())
+  email              String         @unique
+  password           String
+  emailVerified      DateTime?
+  fireblocksVaultId  String?        @unique // One-vault-per-user architecture
+  currentPackage     AffiliateTier? // Current active package
+  packageActivatedAt DateTime?      // When the current package was activated
+  referredByUserId   String?        // Who referred this user (permanent chain link)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
   // Relations
+  referredBy           User?          @relation("UserReferralChain", fields: [referredByUserId], references: [id], onDelete: SetNull)
+  referredUsers        User[]         @relation("UserReferralChain")
   profile              Profile?
   affiliateStatus      AffiliateStatus?
   referralLinksCreated ReferralLink[]
@@ -68,9 +71,8 @@ model User {
   purchases            Purchase[]
   paymentSessions      PaymentSession[]
   referredPurchases    Purchase[]       @relation("ReferredPurchases")
-  packageReferralRewards PackageReferralReward[] @relation("ReferrerPackageRewards")
-  buyerPackageRewards    PackageReferralReward[] @relation("BuyerPackageRewards")
 
+  @@index([referredByUserId])
   @@map("users")
 }
 
@@ -184,15 +186,7 @@ model Commission {
   @@map("commission_ledger")
 }
 
-model CommissionRate {
-  layer       Int      @id
-  ratePercent Float
-  isActive    Boolean  @default(true)
-  updatedBy   String?
-  updatedAt   DateTime @updatedAt
 
-  @@map("commission_rates")
-}
 
 model RevenueEvent {
   id                String        @id @default(cuid())
@@ -214,17 +208,15 @@ model RevenueEvent {
 }
 
 model Package {
-  id                 String   @id @default(cuid())
-  name               String   @unique
-  priceUsd           Float
-  shares             Int
-  dividendCapPercent Float
-  stripeProductId    String?
-  stripePriceId      String?
-  isActive           Boolean  @default(true)
-  updatedBy          String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id               String   @id @default(cuid())
+  name             String   @unique
+  priceUsd         Float
+  isActive         Boolean  @default(true)
+  updatedBy        String?
+  // UniLevel commission levels: [{ level: 1, rate: 10 }, { level: 2, rate: 5 }, ...]
+  commissionLevels Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@map("packages")
 }
@@ -249,7 +241,6 @@ model Purchase {
   referredByUser     User?              @relation("ReferredPurchases", fields: [referredByUserId], references: [id], onDelete: SetNull)
   paymentSession     PaymentSession?
   transactionHistory TransactionHistory[]
-  packageReferralReward PackageReferralReward?
 
   @@index([referralCode])
   @@index([referredByUserId])
@@ -376,25 +367,4 @@ model ContactSubmission {
   @@map("contact_submissions")
 }
 
-model PackageReferralReward {
-  id                String   @id @default(cuid())
-  referrerUserId    String   // User who shared the referral link
-  buyerUserId       String   // User who purchased the package
-  purchaseId        String   @unique // The purchase that triggered this reward
-  tier              String   // Package tier purchased
-  purchaseAmountUsd Float    // Purchase amount in USD
-  rewardPercent     Float    @default(10) // Reward percentage
-  rewardAmountUsd   Float    // Calculated reward amount
-  status            String   @default("pending") // pending, approved, paid
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
 
-  // Relations
-  referrer  User     @relation("ReferrerPackageRewards", fields: [referrerUserId], references: [id], onDelete: Cascade)
-  buyer     User     @relation("BuyerPackageRewards", fields: [buyerUserId], references: [id], onDelete: Cascade)
-  purchase  Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-
-  @@index([referrerUserId])
-  @@index([buyerUserId])
-  @@map("package_referral_rewards")
-}

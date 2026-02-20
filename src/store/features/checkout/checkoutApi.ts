@@ -23,7 +23,6 @@ export interface SupportedAssetsResponse {
 export interface CreateSessionRequest {
   tier: string;
   assetId: string;
-  referralCode?: string;
 }
 
 export interface PaymentSessionData {

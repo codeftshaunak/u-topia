@@ -22,7 +22,6 @@ import {
   X,
 } from "lucide-react";
 import { useResetPasswordMutation } from "@/store/features/auth/authApi";
-import { useUseReferralCodeMutation } from "@/store/features/referrals/referralsApi";
 
 type AuthMode = "signin" | "signup" | "forgot";
 
@@ -41,7 +40,6 @@ const Auth = () => {
   const [mode, setMode] = useState<AuthMode>("signup");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [referralError, setReferralError] = useState<string | null>(null);
   const [rememberMe, setRememberMe] = useState(false);
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
   const [showSavedAccounts, setShowSavedAccounts] = useState(false);
@@ -57,7 +55,6 @@ const Auth = () => {
   const emailInputRef = useRef<HTMLDivElement>(null);
 
   const [resetPassword] = useResetPasswordMutation();
-  const [useReferralCode] = useUseReferralCodeMutation();
 
   // Load saved accounts on mount
   useEffect(() => {
@@ -196,43 +193,20 @@ const Auth = () => {
 
     try {
       if (mode === "signup") {
-        // Sign up using the custom auth context
+        // Sign up using the custom auth context (referral code is handled atomically in signup API)
         await signUp(
           formData.email.trim().toLowerCase(),
           formData.password,
           formData.name.trim(),
           formData.mobile.trim(),
+          referralCode || undefined,
         );
-
-        // If there's a referral code, mark it as used
-        if (referralCode) {
-          try {
-            const refData = await useReferralCode({
-              code: referralCode,
-              email: formData.email.trim().toLowerCase(),
-            }).unwrap();
-
-            if (!refData.success) {
-              setReferralError("Failed to process referral code.");
-            }
-          } catch (refError: any) {
-            console.error("Error processing referral:", refError);
-            const msg = refError?.data?.error || "";
-            if (msg.includes("cannot refer yourself")) {
-              setReferralError("You cannot use your own referral code.");
-            } else if (msg.includes("Invalid or expired") || msg.includes("already")) {
-              setReferralError("This referral code has already been used or is invalid.");
-            } else if (msg.includes("already been referred")) {
-              setReferralError("This email has already been referred by another user.");
-            } else {
-              setReferralError(msg || "Failed to process referral code.");
-            }
-          }
-        }
 
         toast({
           title: "Welcome to U-topia!",
-          description: "Your account has been created successfully.",
+          description: referralCode
+            ? "Your account has been created with a referral link!"
+            : "Your account has been created successfully.",
         });
       } else {
         // Sign in using the custom auth context
@@ -314,21 +288,11 @@ const Auth = () => {
         <div className="w-full max-w-md">
           {/* Referral badge */}
           {referralCode && isSignUp && (
-            <div
-              className={`mb-6 p-3 rounded-xl text-center ${
-                referralError
-                  ? "bg-red-500/10 border border-red-500/30"
-                  : "bg-primary/10 border border-primary/20"
-              }`}
-            >
-              {referralError ? (
-                <p className="text-sm text-red-400">❌ {referralError}</p>
-              ) : (
-                <p className="text-sm text-primary">
-                  🎉 You were referred! Share your code to earn commissions.
-                  <strong>{referralCode}</strong>
-                </p>
-              )}
+            <div className="mb-6 p-3 rounded-xl text-center bg-primary/10 border border-primary/20">
+              <p className="text-sm text-primary">
+                🎉 You were invited! Sign up to join through referral code{" "}
+                <strong>{referralCode}</strong>
+              </p>
             </div>
           )}
 

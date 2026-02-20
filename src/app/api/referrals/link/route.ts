@@ -11,6 +11,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Check if user has purchased a package — required to share referral links
+    const user = await prisma.user.findUnique({
+      where: { id: session.id },
+      select: { currentPackage: true },
+    });
+
+    if (!user?.currentPackage) {
+      return NextResponse.json(
+        {
+          error: 'Package required',
+          message: 'You must purchase a package before you can share your referral link.',
+          hasPackage: false,
+        },
+        { status: 403 }
+      );
+    }
+
     // Get existing active referral link
     let referralLink = await prisma.referralLink.findFirst({
       where: {
@@ -31,7 +48,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ code: referralLink.code });
+    return NextResponse.json({ code: referralLink.code, hasPackage: true });
   } catch (error) {
     console.error('Get referral link error:', error);
     return NextResponse.json(
@@ -47,6 +64,23 @@ export async function POST(request: NextRequest) {
 
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check if user has purchased a package — required to share referral links
+    const user = await prisma.user.findUnique({
+      where: { id: session.id },
+      select: { currentPackage: true },
+    });
+
+    if (!user?.currentPackage) {
+      return NextResponse.json(
+        {
+          error: 'Package required',
+          message: 'You must purchase a package before you can share your referral link.',
+          hasPackage: false,
+        },
+        { status: 403 }
+      );
     }
 
     // Generate new referral link
@@ -72,7 +106,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ code: referralLink.code });
+    return NextResponse.json({ code: referralLink.code, hasPackage: true });
   } catch (error) {
     console.error('Create referral link error:', error);
     return NextResponse.json(

@@ -1,12 +1,11 @@
 /**
- * Package Referrals API
+ * Package Referral Commissions API
  *
  * GET /api/referrals/package-rewards
  *
- * Returns the current user's package referral rewards including:
- * - List of referred users who purchased packages
- * - Total rewards earned
- * - Reward stats
+ * Returns the current user's multi-level commission rewards from the
+ * commission_ledger table. Includes per-referral commission details
+ * and aggregate stats.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -21,24 +20,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Fetch all package referral rewards where current user is the referrer
-    const rewards = await prisma.packageReferralReward.findMany({
+    // Fetch all commissions earned by this user from the Commission ledger
+    const commissions = await prisma.commission.findMany({
       where: {
-        referrerUserId: session.id,
+        beneficiaryUserId: session.id,
       },
       include: {
-        buyer: {
+        referredUser: {
           include: {
             profile: true,
           },
         },
-        purchase: {
+        sourceRevenueEvent: {
           select: {
-            id: true,
-            tier: true,
-            amount: true,
-            status: true,
-            createdAt: true,
+            amountUsd: true,
+            source: true,
           },
         },
       },
@@ -47,30 +43,12 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Also fetch purchases made using this user's referral links (even without rewards yet)
-    const referredPurchases = await prisma.purchase.findMany({
-      where: {
-        referredByUserId: session.id,
-        status: "completed",
-      },
-      include: {
-        user: {
-          include: {
-            profile: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
-
-    // Build response
-    const referredUsers = rewards.map((r) => {
-      const profile = r.buyer.profile;
+    // Build response mapped to the same shape the frontend expects
+    const referredUsers = commissions.map((c) => {
+      const profile = c.referredUser.profile;
 
       // Mask email for privacy
-      const emailToMask = profile?.email || r.buyer.email || "Unknown";
+      const emailToMask = profile?.email || c.referredUser.email || "Unknown";
       const emailParts = emailToMask.split("@");
       const maskedEmail =
         emailParts.length === 2 && emailParts[0].length > 3
@@ -78,26 +56,27 @@ export async function GET(request: NextRequest) {
           : emailToMask;
 
       return {
-        id: r.id,
-        buyerUserId: r.buyerUserId,
+        id: c.id,
+        buyerUserId: c.referredUserId,
         buyerName: profile?.fullName || null,
         buyerEmail: maskedEmail,
         buyerAvatar: profile?.avatarUrl || null,
-        tier: r.tier,
-        purchaseAmountUsd: r.purchaseAmountUsd,
-        rewardPercent: r.rewardPercent,
-        rewardAmountUsd: r.rewardAmountUsd,
-        rewardStatus: r.status,
-        purchaseDate: r.createdAt,
+        tier: c.notes?.match(/\b(bronze|silver|gold|platinum|diamond)\b/i)?.[1] || "unknown",
+        purchaseAmountUsd: c.sourceRevenueEvent?.amountUsd ?? 0,
+        rewardPercent: c.ratePercent,
+        rewardAmountUsd: c.amountUsd,
+        rewardStatus: c.status,
+        layer: c.layer,
+        purchaseDate: c.createdAt,
       };
     });
 
-    // Calculate stats
+    // Aggregate stats
     const stats = {
       totalReferredPurchases: referredUsers.length,
       totalRewardsEarned: referredUsers.reduce(
         (sum, r) => sum + r.rewardAmountUsd,
-        0
+        0,
       ),
       pendingRewards: referredUsers
         .filter((r) => r.rewardStatus === "pending")
@@ -114,8 +93,8 @@ export async function GET(request: NextRequest) {
             acc[r.tier] = (acc[r.tier] || 0) + 1;
             return acc;
           },
-          {} as Record<string, number>
-        )
+          {} as Record<string, number>,
+        ),
       ).map(([tier, count]) => ({ tier, count })),
     };
 
@@ -127,7 +106,7 @@ export async function GET(request: NextRequest) {
         error: "Internal server error",
         details: error instanceof Error ? error.message : String(error),
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

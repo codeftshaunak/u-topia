@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { tier, assetId, referralCode } = body;
+    const { tier, assetId } = body;
 
     // Validate tier
     if (!tier) {
@@ -71,8 +71,7 @@ export async function POST(request: NextRequest) {
       session.id,
       session.email,
       tier,
-      assetId,
-      referralCode || undefined
+      assetId
     );
 
     return NextResponse.json({
