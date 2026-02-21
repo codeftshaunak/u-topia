@@ -19,7 +19,6 @@ import Purchase from "./app-pages/Purchase";
 import PurchaseSuccess from "./app-pages/PurchaseSuccess";
 import ReferAndEarn from "./app-pages/ReferAndEarn";
 import Onboarding from "./app-pages/Onboarding";
-import Upgrade from "./app-pages/Upgrade";
 
 // Dashboard Pages
 import Dashboard from "./app-pages/Dashboard";
@@ -187,16 +186,6 @@ const App = () => (
                   <ProtectedRoute>
                     <Layout>
                       <Settings />
-                    </Layout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/upgrade"
-                element={
-                  <ProtectedRoute>
-                    <Layout>
-                      <Upgrade />
                     </Layout>
                   </ProtectedRoute>
                 }

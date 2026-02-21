@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import NetworkVisualization from "@/components/community/NetworkVisualization";
 import RecentActivity from "@/components/community/RecentActivity";
+import { StatCard } from "@/components/dashboard/StatCard";
+import { useCommissions, formatUSD } from "@/hooks/useCommissions";
 
 const heroImage = "/hero-dashboard.jpg";
 const utopiaLifestyle = "/utopia-lifestyle.avif";
@@ -144,6 +146,7 @@ export default function Explore() {
   const { user } = useAuth();
   const { referralLink } = useReferralLink();
   const { toast } = useToast();
+  const { summary, isLoading: dataLoading } = useCommissions();
 
   const handleViewAllConnections = () => {
     navigate("/members");
@@ -189,50 +192,28 @@ export default function Explore() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Total Earnings Card */}
-        <div className="relative overflow-hidden rounded-xl h-40 group">
-          <img
-            src={cardEarnings}
-            alt="Earnings background"
-            className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/30" />
-          <div className="relative h-full p-5 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-white/90">
-                Total Earnings
-              </span>
-              <DollarSign className="h-5 w-5 text-white/70" />
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-white">$12,450</div>
-              <p className="text-sm text-white/80 flex items-center mt-1">
-                <ArrowUpRight className="h-4 w-4 text-emerald-400 mr-1" />
-                <span className="text-emerald-400 font-medium">+8.2%</span>
-                <span className="ml-1">this month</span>
-              </p>
-            </div>
-          </div>
-        </div>
+        <StatCard
+          title="Total Earnings"
+          value={formatUSD(summary?.total_earned || 0)}
+          icon={DollarSign}
+          backgroundImage={cardEarnings}
+          isLoading={dataLoading}
+        >
+          <p className="text-sm text-white/80 flex items-center mt-1">
+            <TrendingUp className="h-4 w-4 text-emerald-400 mr-1" />
+            <span className="text-white/80">All-time earnings</span>
+          </p>
+        </StatCard>
 
         {/* Pending Card */}
-        <div className="relative overflow-hidden rounded-xl h-40 group">
-          <img
-            src={cardPending}
-            alt="Pending background"
-            className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/30" />
-          <div className="relative h-full p-5 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-white/90">Pending</span>
-              <Wallet className="h-5 w-5 text-white/70" />
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-white">$2,180</div>
-              <p className="text-sm text-white/80 mt-1">Awaiting clearance</p>
-            </div>
-          </div>
-        </div>
+        <StatCard
+          title="Pending"
+          value={formatUSD(summary?.pending || 0)}
+          subtitle="Awaiting clearance"
+          icon={Wallet}
+          backgroundImage={cardPending}
+          isLoading={dataLoading}
+        />
 
         {/* Rank Level Card */}
         <div className="relative overflow-hidden rounded-xl h-40 group">

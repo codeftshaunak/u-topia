@@ -96,8 +96,11 @@ export function useCommissions(): UseCommissionsResult {
     refetch: refetchCommissions,
   } = useGetCommissionsQuery(undefined, { skip: !user });
 
-  const { data: referralsData, refetch: refetchReferrals } =
-    useGetReferralsQuery(undefined, { skip: !user });
+  const {
+    data: referralsData,
+    isLoading: referralsLoading,
+    refetch: refetchReferrals
+  } = useGetReferralsQuery(undefined, { skip: !user });
 
   const { data: profileData, refetch: refetchProfile } =
     useGetProfileQuery(undefined, { skip: !user });
@@ -135,7 +138,7 @@ export function useCommissions(): UseCommissionsResult {
     affiliateStatus,
     activeReferrals,
     recentCommissions,
-    isLoading: commissionsLoading && !commissionsData,
+    isLoading: (commissionsLoading && !commissionsData) || (referralsLoading && !referralsData),
     error: commissionsError ? "Failed to fetch commission data" : null,
     refetch,
   };

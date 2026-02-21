@@ -19,13 +19,6 @@ import {
   RankOverview,
 } from "@/components/dashboard/RankOverview";
 import { usePackages, PackageKey } from "@/hooks/usePackages";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
 const logoLight = "/u-topia-logo-light.png";
 const badgeBronze = "/badge-bronze.png";
 const badgeSilver = "/badge-silver.png";
@@ -40,7 +33,6 @@ import {
   BookOpen,
   History,
   Loader2,
-  ArrowUpCircle,
 } from "lucide-react";
 
 const tierBadges: Record<string, string> = {
@@ -63,7 +55,6 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isUpgradeDialogOpen, setIsUpgradeDialogOpen] = useState(false);
   const { user } = useAuth();
   const { summary, affiliateStatus, activeReferrals } = useCommissions();
   const { packages, formatPrice } = usePackages();
@@ -90,11 +81,6 @@ const Dashboard = () => {
   const currentTier = (affiliateStatus?.tier || "bronze") as PackageKey;
   const displayActiveReferrals = activeReferrals;
   const rankInfo = calculateRankInfo(displayActiveReferrals);
-
-  // Get available upgrades (tiers higher than current)
-  const currentTierIndex = tierOrder.indexOf(currentTier);
-  const availableUpgrades = tierOrder.slice(currentTierIndex + 1);
-  const hasUpgradesAvailable = availableUpgrades.length > 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -179,17 +165,6 @@ const Dashboard = () => {
               {getTierLabel(currentTier)}
             </p>
             <p className="text-sm text-muted-foreground mb-3">Current Tier</p>
-            {hasUpgradesAvailable && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setIsUpgradeDialogOpen(true)}
-                className="w-full gap-2 text-primary border-primary/30 hover:bg-primary/10 hover:border-primary/50"
-              >
-                <ArrowUpCircle className="w-4 h-4" />
-                Upgrade Tier
-              </Button>
-            )}
           </div>
         </div>
       </section>
@@ -359,70 +334,6 @@ const Dashboard = () => {
           </div>
         </div>
       </footer>
-
-      {/* Upgrade Dialog */}
-      <Dialog open={isUpgradeDialogOpen} onOpenChange={setIsUpgradeDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold">
-              Upgrade Your Tier
-            </DialogTitle>
-            <DialogDescription>
-              Unlock deeper commission layers and increased earning potential.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 mt-4">
-            {availableUpgrades.map((tierKey) => {
-              const pkg = packages.find(
-                (p) => p.name.toLowerCase() === tierKey,
-              );
-              if (!pkg) return null;
-
-              const tierIndex = tierOrder.indexOf(tierKey);
-              const depthLimit = tierIndex + 1;
-
-              return (
-                <button
-                  key={tierKey}
-                  onClick={() => {
-                    setIsUpgradeDialogOpen(false);
-                    navigate(`/purchase?tier=${tierKey}`);
-                  }}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl border border-border bg-card hover:border-primary/50 hover:bg-primary/5 transition-all group"
-                >
-                  <img
-                    src={tierBadges[tierKey]}
-                    alt={pkg.name}
-                    className="w-12 h-12 object-contain group-hover:scale-110 transition-transform"
-                  />
-                  <div className="flex-1 text-left">
-                    <p className="font-semibold text-foreground">{pkg.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Up to {depthLimit} commission layer
-                      {depthLimit > 1 ? "s" : ""}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-primary">
-                      {formatPrice(pkg.priceUsd)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">One-time</p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {currentTier === "diamond" && (
-            <div className="mt-4 p-4 rounded-xl bg-primary/10 border border-primary/20 text-center">
-              <p className="text-sm text-primary font-medium">
-                🎉 You're already at the highest tier!
-              </p>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

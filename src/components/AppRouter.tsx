@@ -17,7 +17,6 @@ import Payment from "../app-pages/Payment";
 import PurchaseSuccess from "../app-pages/PurchaseSuccess";
 import ReferAndEarn from "../app-pages/ReferAndEarn";
 import Onboarding from "../app-pages/Onboarding";
-import Upgrade from "../app-pages/Upgrade";
 
 // Dashboard Pages
 import Explore from "../app-pages/Explore";
@@ -180,16 +179,6 @@ const AppRouter = () => {
             <ProtectedRoute>
               <Layout>
                 <Settings />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/upgrade"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Upgrade />
               </Layout>
             </ProtectedRoute>
           }

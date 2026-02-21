@@ -5,7 +5,6 @@ import {
   Settings,
   Info,
   ChevronRight,
-  Gem,
   TrendingUp,
   Compass,
   ShoppingCart,
@@ -36,7 +35,6 @@ const mainItems = [
   { title: "Dashboard", url: "/dashboard", icon: TrendingUp },
   { title: "Purchase", url: "/dashboard/purchase", icon: ShoppingCart },
   { title: "About U-topia", url: "/about", icon: Info },
-  { title: "Upgrade", url: "/upgrade", icon: Gem },
 ];
 
 const channels = [

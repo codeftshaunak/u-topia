@@ -28,6 +28,7 @@ import { usePackages, PackageKey } from "@/hooks/usePackages";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import NetworkVisualization from "@/components/community/NetworkVisualization";
+import { StatCard } from "@/components/dashboard/StatCard";
 const badgeBronze = "/badge-bronze.png";
 const badgeSilver = "/badge-silver.png";
 const badgeGold = "/badge-gold.png";
@@ -74,7 +75,7 @@ export default function Dashboard() {
   // isUpgradeDialogOpen kept for package upgrade dialog (commented out)
   // const [isUpgradeDialogOpen, setIsUpgradeDialogOpen] = useState(false);
   const { user } = useAuth();
-  const { summary, affiliateStatus, activeReferrals } = useCommissions();
+  const { summary, affiliateStatus, activeReferrals, isLoading: dataLoading } = useCommissions();
   const { packages, formatPrice } = usePackages();
   const { toast } = useToast();
   const { referralLink } = useReferralLink();
@@ -146,64 +147,42 @@ export default function Dashboard() {
       <section className="container mx-auto px-6 pb-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Total Earnings Card */}
-          <div className="relative overflow-hidden rounded-xl h-40 group">
-            <img
-              src={cardEarnings}
-              alt="Earnings background"
-              className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/30" />
-            <div className="relative h-full p-5 flex flex-col justify-between">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-white/90">
-                  Total Earnings
-                </span>
-                <DollarSign className="h-5 w-5 text-white/70" />
-              </div>
-              <div>
-                <div className="text-3xl font-bold text-white">$12,450</div>
-                <p className="text-sm text-white/80 flex items-center mt-1">
-                  <ArrowUpRight className="h-4 w-4 text-emerald-400 mr-1" />
-                  <span className="text-emerald-400 font-medium">+8.2%</span>
-                  <span className="ml-1">this month</span>
-                </p>
-              </div>
-            </div>
-          </div>
+          <StatCard
+            title="Total Earnings"
+            value={formatUSD(summary?.total_earned || 0)}
+            icon={DollarSign}
+            backgroundImage={cardEarnings}
+            isLoading={dataLoading}
+          >
+            <p className="text-sm text-white/80 flex items-center mt-1">
+              <TrendingUp className="h-4 w-4 text-emerald-400 mr-1" />
+              <span className="text-white/80">All-time earnings</span>
+            </p>
+          </StatCard>
 
           {/* Available to Withdraw Card */}
-          <div className="relative overflow-hidden rounded-xl h-40 group">
-            <img
-              src={cardPending}
-              alt="Withdraw background"
-              className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/30" />
-            <div className="relative h-full p-5 flex flex-col justify-between">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-white/90">
-                  Available to Withdraw
-                </span>
-                <Wallet className="h-5 w-5 text-white/70" />
-              </div>
-              <div>
-                <div className="text-3xl font-bold text-white">$1,250</div>
-                <Button
-                  size="sm"
-                  className="mt-2 bg-orange-500 hover:bg-orange-600 text-white"
-                  onClick={() => {
-                    toast({
-                      title: "Withdrawal Requested",
-                      description:
-                        "Your withdrawal request is being processed.",
-                    });
-                  }}
-                >
-                  Withdraw Funds
-                </Button>
-              </div>
-            </div>
-          </div>
+          <StatCard
+            title="Available to Withdraw"
+            value={formatUSD(summary?.approved || 0)}
+            icon={Wallet}
+            backgroundImage={cardPending}
+            isLoading={dataLoading}
+          >
+            <Button
+              size="sm"
+              className="mt-2 bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-50"
+              disabled={(summary?.approved || 0) === 0}
+              onClick={() => {
+                toast({
+                  title: "Withdrawal Requested",
+                  description:
+                    "Your withdrawal request is being processed.",
+                });
+              }}
+            >
+              Withdraw Funds
+            </Button>
+          </StatCard>
 
           {/* Referral Code Card */}
           <Card className="overflow-hidden h-40">
@@ -214,7 +193,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-lg px-3 py-2 font-mono text-lg font-bold tracking-widest text-center mb-2">
-                  {referralLink || "Loading..."}
+                  {referralLink || "━━━━━━"}
                 </div>
                 <Button
                   variant="outline"
@@ -231,7 +210,7 @@ export default function Dashboard() {
                     }
                   }}
                 >
-                  Copy Code
+                  {referralLink ? "Copy Code" : "No Code Yet"}
                 </Button>
               </div>
             </div>
@@ -248,13 +227,24 @@ export default function Dashboard() {
                 <p className="text-sm text-muted-foreground">
                   Active Referrals
                 </p>
-                <p className="text-2xl font-bold text-foreground mt-1">
-                  {activeReferrals}
-                </p>
+                {dataLoading ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                    <p className="text-2xl font-bold text-muted-foreground">...</p>
+                  </div>
+                ) : (
+                  <p className="text-2xl font-bold text-foreground mt-1">
+                    {activeReferrals ?? 0}
+                  </p>
+                )}
               </div>
               <Users className="w-5 h-5 text-primary" />
             </div>
-            <p className="text-xs text-muted-foreground">Verified referrals</p>
+            <p className="text-xs text-muted-foreground">
+              {activeReferrals > 0
+                ? "Users who purchased packages"
+                : "Invite users to earn commissions"}
+            </p>
           </div>
           <div className="feature-card p-6">
             <div className="flex items-start justify-between mb-4">

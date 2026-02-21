@@ -81,7 +81,7 @@ export function useReferralLink() {
     referralLink: referralCode,
     fullReferralUrl,
     hasPackage,
-    isLoading: isLoading && !data,
+    isLoading: isLoading && !data && !error,
     isRefreshing: isRefreshing || isRegenerating,
     error: error && hasPackage !== false ? "Failed to fetch referral link" : null,
     regenerateLink,
