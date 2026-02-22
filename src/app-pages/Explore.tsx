@@ -26,6 +26,7 @@ import {
   Copy,
   DollarSign,
   Users,
+  Star,
 } from "lucide-react";
 import NetworkVisualization from "@/components/community/NetworkVisualization";
 import RecentActivity from "@/components/community/RecentActivity";
@@ -146,7 +147,7 @@ export default function Explore() {
   const { user } = useAuth();
   const { referralLink } = useReferralLink();
   const { toast } = useToast();
-  const { summary, isLoading: dataLoading } = useCommissions();
+  const { summary, totalPoints, isLoading: dataLoading } = useCommissions();
 
   const handleViewAllConnections = () => {
     navigate("/members");
@@ -205,15 +206,25 @@ export default function Explore() {
           </p>
         </StatCard>
 
-        {/* Pending Card */}
+        {/* Total Points Card */}
         <StatCard
+          title="Total Points"
+          value={totalPoints.toLocaleString()}
+          subtitle="Loyalty rewards earned"
+          icon={Star}
+          backgroundImage={cardNetwork}
+          isLoading={dataLoading}
+        />
+
+        {/* Pending Card - Hidden for now */}
+        {/* <StatCard
           title="Pending"
           value={formatUSD(summary?.pending || 0)}
           subtitle="Awaiting clearance"
           icon={Wallet}
           backgroundImage={cardPending}
           isLoading={dataLoading}
-        />
+        /> */}
 
         {/* Rank Level Card */}
         <div className="relative overflow-hidden rounded-xl h-40 group">

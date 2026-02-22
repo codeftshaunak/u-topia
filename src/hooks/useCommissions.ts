@@ -45,6 +45,7 @@ interface UseCommissionsResult {
   affiliateStatus: AffiliateStatus | null;
   activeReferrals: number;
   recentCommissions: CommissionEntry[];
+  totalPoints: number;
   isLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -129,6 +130,8 @@ export function useCommissions(): UseCommissionsResult {
     [commissionsData]
   );
 
+  const totalPoints = profileData?.totalPoints ?? 0;
+
   const refetch = async () => {
     await Promise.all([refetchCommissions(), refetchReferrals(), refetchProfile()]);
   };
@@ -138,6 +141,7 @@ export function useCommissions(): UseCommissionsResult {
     affiliateStatus,
     activeReferrals,
     recentCommissions,
+    totalPoints,
     isLoading: (commissionsLoading && !commissionsData) || (referralsLoading && !referralsData),
     error: commissionsError ? "Failed to fetch commission data" : null,
     refetch,

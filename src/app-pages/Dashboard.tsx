@@ -46,6 +46,7 @@ import {
   ArrowUpRight,
   Copy,
   Wallet,
+  Star,
 } from "lucide-react";
 import { useReferralLink } from "@/hooks/useReferralLink";
 import { ReferralToolsCard } from "@/components/ReferralToolsCard";
@@ -68,6 +69,7 @@ const tierOrder: PackageKey[] = [
 
 const cardEarnings = "/card-portfolio.jpg";
 const cardPending = "/card-shares.jpg";
+const cardPoints = "/card-network.jpg";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -75,7 +77,7 @@ export default function Dashboard() {
   // isUpgradeDialogOpen kept for package upgrade dialog (commented out)
   // const [isUpgradeDialogOpen, setIsUpgradeDialogOpen] = useState(false);
   const { user } = useAuth();
-  const { summary, affiliateStatus, activeReferrals, isLoading: dataLoading } = useCommissions();
+  const { summary, affiliateStatus, activeReferrals, totalPoints, isLoading: dataLoading } = useCommissions();
   const { packages, formatPrice } = usePackages();
   const { toast } = useToast();
   const { referralLink } = useReferralLink();
@@ -145,7 +147,7 @@ export default function Dashboard() {
 
       {/* Stats Row */}
       <section className="container mx-auto px-6 pb-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Total Earnings Card */}
           <StatCard
             title="Total Earnings"
@@ -157,6 +159,19 @@ export default function Dashboard() {
             <p className="text-sm text-white/80 flex items-center mt-1">
               <TrendingUp className="h-4 w-4 text-emerald-400 mr-1" />
               <span className="text-white/80">All-time earnings</span>
+            </p>
+          </StatCard>
+
+          {/* Total Points Card */}
+          <StatCard
+            title="Total Points"
+            value={totalPoints.toLocaleString()}
+            icon={Star}
+            backgroundImage={cardPoints}
+            isLoading={dataLoading}
+          >
+            <p className="text-sm text-white/80 mt-1">
+              Loyalty rewards earned
             </p>
           </StatCard>
 

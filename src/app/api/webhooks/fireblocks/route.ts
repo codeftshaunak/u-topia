@@ -447,12 +447,15 @@ async function handleCompleted(data: WebhookPayload["data"]) {
         data: { status: "completed" },
       }),
 
-      // Update User with current package and activation time
+      // Update User with current package, activation time, and points (100% of purchase)
       prisma.user.update({
         where: { id: session.userId },
         data: {
           currentPackage: session.tier as AffiliateTier,
           packageActivatedAt: new Date(),
+          totalPoints: {
+            increment: pkg.price, // 100% of purchase amount as points
+          },
         },
       }),
 
@@ -622,22 +625,37 @@ async function handleCompleted(data: WebhookPayload["data"]) {
                 const commissionAmount = parseFloat((purchasePrice * levelEntry.rate / 100).toFixed(2));
 
                 if (commissionAmount > 0) {
-                  await prisma.commission.create({
-                    data: {
-                      beneficiaryUserId: ancestor.id,
-                      referredUserId: session.userId,
-                      sourceRevenueEventId: revenueEvent.id,
-                      layer,
-                      ratePercent: levelEntry.rate,
-                      amountUsd: commissionAmount,
-                      status: "approved",
-                      notes: `L${layer} commission: ${ancestor.currentPackage} referrer earns ${levelEntry.rate}% on $${purchasePrice} ${session.tier} purchase`,
-                    },
-                  });
+                  // Calculate points for referrer (1% of purchase price)
+                  const referrerPoints = parseFloat((purchasePrice * 0.01).toFixed(2));
+
+                  // Create commission and award points to referrer in a transaction
+                  await prisma.$transaction([
+                    prisma.commission.create({
+                      data: {
+                        beneficiaryUserId: ancestor.id,
+                        referredUserId: session.userId,
+                        sourceRevenueEventId: revenueEvent.id,
+                        layer,
+                        ratePercent: levelEntry.rate,
+                        amountUsd: commissionAmount,
+                        status: "approved",
+                        notes: `L${layer} commission: ${ancestor.currentPackage} referrer earns ${levelEntry.rate}% on $${purchasePrice} ${session.tier} purchase`,
+                      },
+                    }),
+                    // Award 1% points to referrer
+                    prisma.user.update({
+                      where: { id: ancestor.id },
+                      data: {
+                        totalPoints: {
+                          increment: referrerPoints,
+                        },
+                      },
+                    }),
+                  ]);
 
                   console.log(
                     `[Commission] PAID L${layer}: ancestor=${ancestor.id} (${ancestor.currentPackage}) ` +
-                    `rate=${levelEntry.rate}% amount=$${commissionAmount} (from $${purchasePrice} ${session.tier})`
+                    `rate=${levelEntry.rate}% amount=$${commissionAmount} points=+${referrerPoints} (from $${purchasePrice} ${session.tier})`
                   );
                 }
               } else {

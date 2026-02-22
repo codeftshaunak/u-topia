@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       profile: user.profile,
       affiliateStatus: user.affiliateStatus,
+      totalPoints: user.totalPoints,
     });
   } catch (error) {
     console.error("Get profile error:", error);

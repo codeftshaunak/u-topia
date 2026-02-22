@@ -54,6 +54,7 @@ model User {
   currentPackage     AffiliateTier? // Current active package
   packageActivatedAt DateTime?      // When the current package was activated
   referredByUserId   String?        // Who referred this user (permanent chain link)
+  totalPoints        Float          @default(0) // Total points earned (100% from own purchases + 1% from referrals)
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 
