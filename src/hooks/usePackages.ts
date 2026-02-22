@@ -44,7 +44,6 @@ export function usePackages() {
     return [
       `Unlimited Referrals`,
       `Commission Depth: ${depth} level${depth !== 1 ? "s" : ""}`,
-      `Maximum Commission: Up to ${total.toFixed(depth > 0 ? (total % 1 === 0 ? 0 : 4) : 0)}%`,
       ...levels.map(l => `Level ${l.level}: ${l.rate}%`),
     ];
   };

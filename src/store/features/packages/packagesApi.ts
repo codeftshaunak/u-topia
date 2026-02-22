@@ -37,23 +37,23 @@ export const PACKAGE_ORDER: PackageKey[] = [
 /** Fallback packages used while the API loads (mirrors commission table). */
 export const DEFAULT_PACKAGES: Package[] = [
   {
-    id: "default-bronze", name: "Bronze", priceUsd: 100, isActive: true,
+    id: "default-bronze", name: "Bronze", priceUsd: 1, isActive: true,
     commissionLevels: [{ level: 1, rate: 10 }],
   },
   {
-    id: "default-silver", name: "Silver", priceUsd: 250, isActive: true,
+    id: "default-silver", name: "Silver", priceUsd: 2, isActive: true,
     commissionLevels: [{ level: 1, rate: 10 }, { level: 2, rate: 5 }],
   },
   {
-    id: "default-gold", name: "Gold", priceUsd: 500, isActive: true,
+    id: "default-gold", name: "Gold", priceUsd: 3, isActive: true,
     commissionLevels: [{ level: 1, rate: 10 }, { level: 2, rate: 5 }, { level: 3, rate: 2.5 }],
   },
   {
-    id: "default-platinum", name: "Platinum", priceUsd: 1000, isActive: true,
+    id: "default-platinum", name: "Platinum", priceUsd: 4, isActive: true,
     commissionLevels: [{ level: 1, rate: 10 }, { level: 2, rate: 5 }, { level: 3, rate: 2.5 }, { level: 4, rate: 1.25 }],
   },
   {
-    id: "default-diamond", name: "Diamond", priceUsd: 2500, isActive: true,
+    id: "default-diamond", name: "Diamond", priceUsd: 5, isActive: true,
     commissionLevels: [
       { level: 1, rate: 10 }, { level: 2, rate: 5 }, { level: 3, rate: 2.5 },
       { level: 4, rate: 1.25 }, { level: 5, rate: 0.625 }, { level: 6, rate: 0.3125 },

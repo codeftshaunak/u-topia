@@ -16,6 +16,9 @@ enum AffiliateTier {
   gold
   platinum
   diamond
+  elite
+  legend
+  titan
 }
 
 enum CommissionStatus {
@@ -210,7 +213,9 @@ model RevenueEvent {
 model Package {
   id               String   @id @default(cuid())
   name             String   @unique
+  level            Int      @default(1)        // Package level 1-8 (R1-R8)
   priceUsd         Float
+  maxDepth         Int      @default(1)        // Max referral depth this package unlocks
   isActive         Boolean  @default(true)
   updatedBy        String?
   // UniLevel commission levels: [{ level: 1, rate: 10 }, { level: 2, rate: 5 }, ...]
@@ -219,6 +224,22 @@ model Package {
   updatedAt        DateTime @updatedAt
 
   @@map("packages")
+}
+
+// Track package upgrades (pay commission only on the price difference)
+model PackageUpgrade {
+  id              String   @id @default(cuid())
+  userId          String
+  fromPackage     String   // e.g. "bronze"
+  toPackage       String   // e.g. "gold"
+  fromPriceUsd    Float
+  toPriceUsd      Float
+  differenceUsd   Float    // toPriceUsd - fromPriceUsd (commission base)
+  purchaseId      String?  // Link to the upgrade purchase
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@map("package_upgrades")
 }
 
 model Purchase {

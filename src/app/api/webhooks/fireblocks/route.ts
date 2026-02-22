@@ -20,6 +20,12 @@ import crypto from "crypto";
 import prisma from "@/lib/db";
 import { AffiliateTier } from "@prisma/client";
 import {
+  distributeCommissions,
+  handlePackageUpgrade,
+  PACKAGE_LEVELS,
+  PACKAGE_PRICES,
+} from "@/lib/commission";
+import {
   findSessionByDepositAddress,
   findSessionByVaultId,
   findSessionByVaultAndAmount,
@@ -532,33 +538,15 @@ async function handleCompleted(data: WebhookPayload["data"]) {
 
     console.log(`[Webhook] PAYMENT COMPLETED: user=${session.userId} tier=${session.tier} amount=$${amountUsd}`);
 
-    // ─── Multi-Level Referral Commission (DB-driven) ────────────────────
+    // ─── Multi-Level Referral Commission (via commission engine) ─────────
     //
-    // Walk up the referral chain (User.referredByUserId) up to MAX_DEPTH=8.
-    // For each ancestor at level L:
-    //   1. Look up the ancestor's OWN package from the packages DB table
-    //   2. Read commissionLevels JSON: [{ level: 1, rate: 10 }, ...]
-    //   3. Find the entry where level === L
-    //   4. If found → commission = purchasePrice × rate / 100
-    //   5. If missing → ancestor's package doesn't unlock that depth → skip
+    // Uses the centralized commission library to:
+    // 1. Walk the referral chain up to 8 levels
+    // 2. Check each ancestor's package eligibility
+    // 3. Calculate & write commission records in a single transaction
+    // 4. Handle upgrades (commission on price difference only)
     //
-    // Commission is based on the REFERRER's package, not the buyer's.
     try {
-      const MAX_DEPTH = 8;
-
-      // Fetch all packages from DB once (avoid N+1 queries)
-      const allPackages = await prisma.package.findMany({
-        where: { isActive: true },
-      });
-      const packageByName: Record<string, typeof allPackages[0]> = {};
-      for (const p of allPackages) {
-        packageByName[p.name.toLowerCase()] = p;
-      }
-
-      // Purchase price from DB package (fallback to TIER_PACKAGES for safety)
-      const dbPackage = packageByName[session.tier.toLowerCase()];
-      const purchasePrice = dbPackage?.priceUsd ?? pkg.price;
-
       // Find the revenue event we just created for this purchase
       const revenueEvent = await prisma.revenueEvent.findFirst({
         where: {
@@ -571,97 +559,50 @@ async function handleCompleted(data: WebhookPayload["data"]) {
 
       if (!revenueEvent) {
         console.warn("[Webhook] Revenue event not found for commission calculation");
-      }
+      } else {
+        // Check if this is an upgrade (user already had a package)
+        const buyer = await prisma.user.findUnique({
+          where: { id: session.userId },
+          select: { currentPackage: true, referredByUserId: true },
+        });
 
-      // Get the buyer's direct referrer
-      const buyer = await prisma.user.findUnique({
-        where: { id: session.userId },
-        select: { referredByUserId: true },
-      });
+        if (buyer?.referredByUserId) {
+          const currentLevel = buyer.currentPackage
+            ? (PACKAGE_LEVELS[buyer.currentPackage.toLowerCase()] ?? 0)
+            : 0;
+          const newLevel = PACKAGE_LEVELS[session.tier.toLowerCase()] ?? 0;
+          const isUpgrade = currentLevel > 0 && newLevel > currentLevel;
 
-      if (buyer?.referredByUserId && revenueEvent) {
-        let currentUserId: string | null = buyer.referredByUserId;
-        let layer = 1;
-        const visitedIds = new Set<string>([session.userId]); // Prevent circular refs
-
-        console.log(`[Commission] Starting chain walk for purchase: $${purchasePrice} (${session.tier})`);
-
-        while (currentUserId && layer <= MAX_DEPTH) {
-          if (visitedIds.has(currentUserId)) {
-            console.warn(`[Commission] Circular referral at user ${currentUserId}, stopping`);
-            break;
-          }
-          visitedIds.add(currentUserId);
-
-          // Fetch the ancestor's details
-          const ancestor = await prisma.user.findUnique({
-            where: { id: currentUserId },
-            select: {
-              id: true,
-              currentPackage: true,
-              referredByUserId: true,
-              affiliateStatus: { select: { isActive: true } },
-            },
-          });
-
-          if (!ancestor) break;
-
-          const hasPackage = !!ancestor.currentPackage;
-          const isActive = ancestor.affiliateStatus?.isActive ?? false;
-
-          if (hasPackage && isActive) {
-            // Look up the ancestor's PACKAGE from DB
-            const ancestorPkg = packageByName[ancestor.currentPackage!.toLowerCase()];
-
-            if (ancestorPkg) {
-              // Parse commission levels from DB JSON
-              const levels = (ancestorPkg.commissionLevels as Array<{ level: number; rate: number }>) ?? [];
-              const levelEntry = levels.find(l => l.level === layer);
-
-              if (levelEntry && levelEntry.rate > 0) {
-                const commissionAmount = parseFloat((purchasePrice * levelEntry.rate / 100).toFixed(2));
-
-                if (commissionAmount > 0) {
-                  await prisma.commission.create({
-                    data: {
-                      beneficiaryUserId: ancestor.id,
-                      referredUserId: session.userId,
-                      sourceRevenueEventId: revenueEvent.id,
-                      layer,
-                      ratePercent: levelEntry.rate,
-                      amountUsd: commissionAmount,
-                      status: "approved",
-                      notes: `L${layer} commission: ${ancestor.currentPackage} referrer earns ${levelEntry.rate}% on $${purchasePrice} ${session.tier} purchase`,
-                    },
-                  });
-
-                  console.log(
-                    `[Commission] PAID L${layer}: ancestor=${ancestor.id} (${ancestor.currentPackage}) ` +
-                    `rate=${levelEntry.rate}% amount=$${commissionAmount} (from $${purchasePrice} ${session.tier})`
-                  );
-                }
-              } else {
-                console.log(
-                  `[Commission] SKIP L${layer}: ancestor=${ancestor.id} (${ancestor.currentPackage}) ` +
-                  `— package has no rate for level ${layer} (max depth: ${levels.length})`
-                );
-              }
-            } else {
-              console.log(
-                `[Commission] SKIP L${layer}: ancestor=${ancestor.id} ` +
-                `— package "${ancestor.currentPackage}" not found in DB`
-              );
-            }
-          } else {
-            console.log(
-              `[Commission] SKIP L${layer}: ancestor=${ancestor.id} ` +
-              `hasPackage=${hasPackage} isActive=${isActive}`
+          if (isUpgrade) {
+            // Upgrade: commission on price difference only
+            const result = await handlePackageUpgrade(
+              session.userId,
+              session.tier,
+              revenueEvent.id,
             );
-          }
+            console.log(
+              `[Commission] Upgrade result: ${result.fromTier} → ${result.toTier}, ` +
+              `base=$${result.commissionBase}, paid=$${result.totalCommissionPaid}`,
+            );
+          } else {
+            // New purchase: commission on full price
+            const dbPackage = await prisma.package.findFirst({
+              where: { name: { equals: session.tier, mode: "insensitive" } },
+            });
+            const purchasePrice = dbPackage?.priceUsd ?? (PACKAGE_PRICES[session.tier.toLowerCase()] ?? pkg.price);
 
-          // Move up the chain
-          currentUserId = ancestor.referredByUserId;
-          layer++;
+            const result = await distributeCommissions(
+              session.userId,
+              purchasePrice,
+              purchasePrice, // Full price as commission base
+              revenueEvent.id,
+              session.tier,
+            );
+
+            if (!result.success) {
+              console.error("[Commission] Distribution failed:", result.error);
+            }
+          }
         }
       }
     } catch (commissionErr) {
