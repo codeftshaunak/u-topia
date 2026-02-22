@@ -109,11 +109,14 @@ export function usdToBtc(usd: number, btcRateUsd: number): number {
 }
 
 export const TIER_PACKAGES: Record<string, { name: string; price: number; shares: number }> = {
-  bronze:   { name: "Bronze Membership",   price: 1,  shares: 100  },
-  silver:   { name: "Silver Membership",   price: 2,  shares: 250  },
-  gold:     { name: "Gold Membership",     price: 3,  shares: 500  },
-  platinum: { name: "Platinum Membership", price: 4, shares: 1000 },
-  diamond:  { name: "Diamond Membership",  price: 5, shares: 2500 },
+  bronze:   { name: "Bronze Membership",   price: 1,    shares: 100   },
+  silver:   { name: "Silver Membership",   price: 2,    shares: 250   },
+  gold:     { name: "Gold Membership",     price: 3,    shares: 500   },
+  platinum: { name: "Platinum Membership", price: 4,    shares: 1000  },
+  diamond:  { name: "Diamond Membership",  price: 5,    shares: 2500  },
+  elite:    { name: "Elite Membership",    price: 6,    shares: 5000  },
+  legend:   { name: "Legend Membership",   price: 7,    shares: 10000 },
+  titan:    { name: "Titan Membership",    price: 8,    shares: 25000 },
 };
 
 /**
@@ -611,6 +614,7 @@ export function getTierFromAmount(amountUsd: number): string | null {
 export function getTierDepth(tier: string): number {
   const depths: Record<string, number> = {
     bronze: 1, silver: 2, gold: 3, platinum: 4, diamond: 5,
+    elite: 6, legend: 7, titan: 8,
   };
   return depths[tier.toLowerCase()] || 1;
 }

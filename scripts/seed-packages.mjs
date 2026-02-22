@@ -24,7 +24,9 @@ const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 const packages = [
   {
     name: 'Bronze',
-    priceUsd: 100,
+    level: 1,
+    priceUsd: 1,
+    maxDepth: 1,
     isActive: true,
     commissionLevels: [
       { level: 1, rate: 10 },
@@ -32,7 +34,9 @@ const packages = [
   },
   {
     name: 'Silver',
-    priceUsd: 250,
+    level: 2,
+    priceUsd: 2,
+    maxDepth: 2,
     isActive: true,
     commissionLevels: [
       { level: 1, rate: 10 },
@@ -41,7 +45,9 @@ const packages = [
   },
   {
     name: 'Gold',
-    priceUsd: 500,
+    level: 3,
+    priceUsd: 3,
+    maxDepth: 3,
     isActive: true,
     commissionLevels: [
       { level: 1, rate: 10 },
@@ -51,7 +57,9 @@ const packages = [
   },
   {
     name: 'Platinum',
-    priceUsd: 1000,
+    level: 4,
+    priceUsd: 4,
+    maxDepth: 4,
     isActive: true,
     commissionLevels: [
       { level: 1, rate: 10 },
@@ -62,7 +70,9 @@ const packages = [
   },
   {
     name: 'Diamond',
-    priceUsd: 2500,
+    level: 5,
+    priceUsd: 5,
+    maxDepth: 5,
     isActive: true,
     commissionLevels: [
       { level: 1, rate: 10 },
@@ -70,7 +80,54 @@ const packages = [
       { level: 3, rate: 2.5 },
       { level: 4, rate: 1.25 },
       { level: 5, rate: 0.625 },
-      { level: 6, rate: 0.3125 },
+    ],
+  },
+  {
+    name: 'Elite',
+    level: 6,
+    priceUsd: 6,
+    maxDepth: 6,
+    isActive: true,
+    commissionLevels: [
+      { level: 1, rate: 10 },
+      { level: 2, rate: 5 },
+      { level: 3, rate: 2.5 },
+      { level: 4, rate: 1.25 },
+      { level: 5, rate: 0.625 },
+      { level: 6, rate: 0.3175 },
+    ],
+  },
+  {
+    name: 'Legend',
+    level: 7,
+    priceUsd: 7,
+    maxDepth: 7,
+    isActive: true,
+    commissionLevels: [
+      { level: 1, rate: 10 },
+      { level: 2, rate: 5 },
+      { level: 3, rate: 2.5 },
+      { level: 4, rate: 1.25 },
+      { level: 5, rate: 0.625 },
+      { level: 6, rate: 0.3175 },
+      { level: 7, rate: 0.15875 },
+    ],
+  },
+  {
+    name: 'Titan',
+    level: 8,
+    priceUsd: 8,
+    maxDepth: 8,
+    isActive: true,
+    commissionLevels: [
+      { level: 1, rate: 10 },
+      { level: 2, rate: 5 },
+      { level: 3, rate: 2.5 },
+      { level: 4, rate: 1.25 },
+      { level: 5, rate: 0.625 },
+      { level: 6, rate: 0.3175 },
+      { level: 7, rate: 0.15875 },
+      { level: 8, rate: 0.079375 },
     ],
   },
 ];
@@ -82,20 +139,24 @@ async function main() {
     const result = await prisma.package.upsert({
       where: { name: p.name },
       update: {
+        level: p.level,
         priceUsd: p.priceUsd,
+        maxDepth: p.maxDepth,
         isActive: p.isActive,
         commissionLevels: p.commissionLevels,
       },
       create: {
         name: p.name,
+        level: p.level,
         priceUsd: p.priceUsd,
+        maxDepth: p.maxDepth,
         isActive: p.isActive,
         commissionLevels: p.commissionLevels,
       },
     });
 
     const levels = p.commissionLevels.map(l => `L${l.level}:${l.rate}%`).join(', ');
-    console.log(`✔ ${result.name.padEnd(10)} $${result.priceUsd.toLocaleString().padStart(5)}  [${levels}]`);
+    console.log(`✔ R${p.level} ${result.name.padEnd(10)} $${result.priceUsd.toLocaleString().padStart(6)}  depth=${p.maxDepth}  [${levels}]`);
   }
 
   console.log('\nDone.');
